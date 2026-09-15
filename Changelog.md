@@ -10,6 +10,7 @@
 
 * Make saved games robust against item changes (breaks saves)
 * Cache computed paths during auto-travel
+* Cache computed paths for monster path-finding
 
 ## Release 0.8.0 (2026-09-05)
 

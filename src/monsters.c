@@ -78,6 +78,21 @@ struct monster
     gint visrange;           /* visibility range */
     guint32
         unknown: 1;      /* monster is unknown (mimic) */
+
+    /* cached path, so that a monster pursuing a stationary target does
+       not need to redo the full pathfinding search on every single turn;
+       not serialized, just like fv above */
+    path *cached_path;
+    position cached_path_goal;  /* destination the cached path leads to */
+    position cached_path_pos;   /* position the monster is expected to be
+                                    at when the cached path is consulted
+                                    next; used to detect a turn in which
+                                    the monster did not actually advance
+                                    (e.g. spent it opening a door) */
+    bool cached_path_failed;    /* true if the last search for
+                                    cached_path_goal found no path */
+    guint32 cached_path_retry_after; /* game turn after which a failed
+                                         search may be retried */
 };
 
 const char *monster_ai_desc[] =
@@ -1123,6 +1138,10 @@ void monster_destroy(monster *m)
     /* free monster's FOV if existing */
     if (m->fv)
         fov_free(m->fv);
+
+    /* free monster's cached path if existing */
+    if (m->cached_path)
+        path_destroy(m->cached_path);
 
     g_free(m);
 }
@@ -3538,18 +3557,48 @@ static position monster_find_next_pos_to(monster *m, position dest)
     /* next position */
     position npos = monster_pos(m);
 
-    /* find the next step in the direction of dest */
-    path *path = path_find(monster_map(m), monster_pos(m), dest,
-                           monster_map_element(m));
-
-    if (path && !g_queue_is_empty(path->path))
+    /* the cached path is no longer usable if the destination has
+       changed, it has been fully consumed, or the monster did not
+       actually arrive where the previous step expected it to be (e.g.
+       it spent the turn opening a door instead of moving through it) */
+    if (m->cached_path != NULL
+            && (!pos_identical(m->cached_path_goal, dest)
+                || !pos_identical(m->cached_path_pos, monster_pos(m))
+                || g_queue_is_empty(m->cached_path->path)))
     {
-        path_element *el = g_queue_pop_head(path->path);
-        npos = el->pos;
+        path_destroy(m->cached_path);
+        m->cached_path = NULL;
     }
 
-    /* clean up */
-    if (path) path_destroy(path);
+    /* a moment ago a search for this very destination failed; do not
+       immediately retry the (expensive, possibly map-wide) search every
+       single turn - a genuinely unreachable destination stays unreachable
+       for a while */
+    if (m->cached_path == NULL && m->cached_path_failed
+            && pos_identical(m->cached_path_goal, dest)
+            && game_turn(nlarn) < m->cached_path_retry_after)
+    {
+        return npos;
+    }
+
+    /* find a new path to the destination */
+    if (m->cached_path == NULL)
+    {
+        m->cached_path = path_find(monster_map(m), monster_pos(m), dest,
+                                   monster_map_element(m));
+        m->cached_path_goal = dest;
+        m->cached_path_failed = (m->cached_path == NULL);
+
+        if (m->cached_path_failed)
+            m->cached_path_retry_after = game_turn(nlarn) + 10;
+    }
+
+    if (m->cached_path && !g_queue_is_empty(m->cached_path->path))
+    {
+        path_element *el = g_queue_pop_head(m->cached_path->path);
+        npos = el->pos;
+        m->cached_path_pos = npos;
+    }
 
     return npos;
 }
