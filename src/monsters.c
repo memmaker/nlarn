@@ -3798,6 +3798,14 @@ static position monster_move_flee(monster *m, struct player *p)
         }
     }
 
+    /* cornered: no tile increases the distance to the player, so there is
+       nowhere left to flee to. Make a last stand instead of just standing
+       there and taking hits. */
+    if (pos_identical(npos, monster_pos(m)) && pos_adjacent(monster_pos(m), p->pos))
+    {
+        monster_player_attack(m, p);
+    }
+
     return npos;
 }
 

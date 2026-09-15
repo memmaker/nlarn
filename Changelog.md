@@ -4,6 +4,8 @@
 
 ### Changes
 
+* Cornered monster attack again, even if they fled before
+
 ### Fixes
 
 * Make saved games robust against item changes (breaks saves)
