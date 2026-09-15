@@ -376,6 +376,10 @@ static void mainloop()
     /* position chosen for auto travel, allowing to continue travel */
     position cpos = pos_invalid;
 
+    /* path to the current travel destination; computed once and then
+       consumed step by step instead of being recalculated every step */
+    path *travel_path = NULL;
+
     int run_cmd = 0;
     int ch = 0;
     bool adj_corr = false;
@@ -387,6 +391,13 @@ static void mainloop()
     {
         /* repaint screen */
         display_paint_screen(nlarn->p);
+
+        /* travel is not (or no longer) in progress: drop the cached path */
+        if (!pos_valid(pos) && travel_path != NULL)
+        {
+            path_destroy(travel_path);
+            travel_path = NULL;
+        }
 
         if (pos_valid(pos))
         {
@@ -416,14 +427,17 @@ static void mainloop()
             }
             else
             {
-                /* find a path to the destination */
-                path *path = path_find(game_map(nlarn, Z(nlarn->p->pos)),
-                                       nlarn->p->pos, pos, LE_GROUND);
+                /* find a path to the destination, if required */
+                if (travel_path == NULL)
+                {
+                    travel_path = path_find(game_map(nlarn, Z(nlarn->p->pos)),
+                                            nlarn->p->pos, pos, LE_GROUND);
+                }
 
-                if (path && !g_queue_is_empty(path->path))
+                if (travel_path && !g_queue_is_empty(travel_path->path))
                 {
                     /* Path found. Move the player. */
-                    path_element *el = g_queue_pop_head(path->path);
+                    path_element *el = g_queue_pop_head(travel_path->path);
                     moves_count = player_move(nlarn->p, pos_dir(nlarn->p->pos, el->pos), true);
 
                     if (moves_count == 0)
@@ -444,9 +458,6 @@ static void mainloop()
                     /* No path found. Stop traveling */
                     pos = pos_invalid;
                 }
-
-                /* clean up */
-                if (path) path_destroy(path);
             }
         }
         else if (run_cmd != 0)
