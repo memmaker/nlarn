@@ -9,6 +9,7 @@
 ### Fixes
 
 * Make saved games robust against item changes (breaks saves)
+* Speed up pathfinding by 2.4x
 * Cache computed paths during auto-travel
 * Cache computed paths for monster path-finding
 

@@ -29,14 +29,20 @@ typedef struct path_element
     position pos;
     guint32 g_score;
     guint32 h_score;
+    bool in_closed;
     struct path_element* parent;
 } path_element;
+
+/* opaque binary min-heap of open path_elements, ordered by g_score + h_score;
+   defined in pathfinding.c */
+typedef struct path_heap path_heap;
 
 typedef struct path
 {
     GQueue *path;
-    GPtrArray *closed;
-    GPtrArray *open;
+    GHashTable *nodes;  /* position.val -> the one path_element for that
+                            position seen so far during this search */
+    path_heap *open;
     position start;
     position goal;
 } path;

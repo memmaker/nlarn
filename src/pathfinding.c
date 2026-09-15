@@ -25,11 +25,105 @@ static path *path_new(position start, position goal);
 static path_element *path_element_new(position pos);
 static guint path_step_cost(map *m, const path_element* element,
     map_element_t map_elem, bool for_player);
-static guint path_cost(path_element* element, position target);
-static path_element *path_element_in_list(const path_element* el, const GPtrArray *list);
-static path_element *path_find_best(const path *pt);
 static GPtrArray *path_get_neighbours(map *m, position pos,
     map_element_t element, bool for_player, position goal);
+
+/* --- binary min-heap of open path_elements, keyed by g_score + h_score ---
+   Using a heap here (instead of scanning a plain array for the lowest-cost
+   element, as before) turns "pick the best open node" from an O(n) into an
+   O(log n) operation. Decrease-key is implemented lazily: an element whose
+   score improves is simply pushed again under its new key, and a stale
+   duplicate is recognised and skipped via the in_closed flag when it is
+   later popped. */
+typedef struct
+{
+    guint32 key;
+    path_element *el;
+} path_heap_entry;
+
+struct path_heap
+{
+    GArray *entries;
+};
+
+static path_heap *path_heap_new(void)
+{
+    path_heap *h = g_malloc0(sizeof(path_heap));
+    h->entries = g_array_new(FALSE, FALSE, sizeof(path_heap_entry));
+
+    return h;
+}
+
+static void path_heap_destroy(path_heap *h)
+{
+    g_array_free(h->entries, TRUE);
+    g_free(h);
+}
+
+static inline void path_heap_swap(GArray *a, guint i, guint j)
+{
+    path_heap_entry tmp = g_array_index(a, path_heap_entry, i);
+    g_array_index(a, path_heap_entry, i) = g_array_index(a, path_heap_entry, j);
+    g_array_index(a, path_heap_entry, j) = tmp;
+}
+
+static void path_heap_push(path_heap *h, guint32 key, path_element *el)
+{
+    path_heap_entry entry = { key, el };
+    g_array_append_val(h->entries, entry);
+
+    guint idx = h->entries->len - 1;
+    while (idx > 0)
+    {
+        guint parent = (idx - 1) / 2;
+
+        if (g_array_index(h->entries, path_heap_entry, parent).key
+                <= g_array_index(h->entries, path_heap_entry, idx).key)
+            break;
+
+        path_heap_swap(h->entries, idx, parent);
+        idx = parent;
+    }
+}
+
+static path_element *path_heap_pop_min(path_heap *h)
+{
+    guint len = h->entries->len;
+    if (len == 0)
+        return NULL;
+
+    path_element *top = g_array_index(h->entries, path_heap_entry, 0).el;
+
+    g_array_index(h->entries, path_heap_entry, 0) =
+        g_array_index(h->entries, path_heap_entry, len - 1);
+    g_array_set_size(h->entries, len - 1);
+
+    guint idx = 0;
+    guint size = h->entries->len;
+
+    while (true)
+    {
+        guint left = 2 * idx + 1;
+        guint right = 2 * idx + 2;
+        guint smallest = idx;
+
+        if (left < size && g_array_index(h->entries, path_heap_entry, left).key
+                < g_array_index(h->entries, path_heap_entry, smallest).key)
+            smallest = left;
+
+        if (right < size && g_array_index(h->entries, path_heap_entry, right).key
+                < g_array_index(h->entries, path_heap_entry, smallest).key)
+            smallest = right;
+
+        if (smallest == idx)
+            break;
+
+        path_heap_swap(h->entries, idx, smallest);
+        idx = smallest;
+    }
+
+    return top;
+}
 
 path *path_find(map *m, position start, position goal, map_element_t element)
 {
@@ -45,19 +139,26 @@ path *path_find(map *m, position start, position goal, map_element_t element)
 
     path *pt = path_new(start, goal);
 
-    /* add start to open list */
+    /* add start to the open heap and to the set of known nodes */
     path_element *curr = path_element_new(start);
-    g_ptr_array_add(pt->open, curr);
+    curr->g_score = 0;
+    curr->h_score = pos_distance(start, goal);
+    g_hash_table_insert(pt->nodes, GUINT_TO_POINTER(pos_val(start)), curr);
+    path_heap_push(pt->open, curr->g_score + curr->h_score, curr);
 
     /* check if the path is being determined for the player */
     bool for_player = pos_identical(start, nlarn->p->pos);
 
-    while (pt->open->len)
+    while ((curr = path_heap_pop_min(pt->open)) != NULL)
     {
-        curr = path_find_best(pt);
+        if (curr->in_closed)
+        {
+            /* stale duplicate left behind by a since-superseded, cheaper
+               route to this node (see the "decrease-key" push below) */
+            continue;
+        }
 
-        g_ptr_array_remove_fast(pt->open, curr);
-        g_ptr_array_add(pt->closed, curr);
+        curr->in_closed = true;
 
         if (pos_identical(curr->pos, pt->goal))
         {
@@ -80,35 +181,35 @@ path *path_find(map *m, position start, position goal, map_element_t element)
             path_element *next = g_ptr_array_remove_index_fast(neighbours,
                                                 neighbours->len - 1);
 
-            bool next_is_better = false;
-
-            if (path_element_in_list(next, pt->closed))
-            {
-                g_free(next);
-                continue;
-            }
-
             const guint32 next_g_score = curr->g_score
                 + path_step_cost(m, next, element, for_player);
 
-            if (!path_element_in_list(next, pt->open))
+            path_element *known = g_hash_table_lookup(pt->nodes,
+                    GUINT_TO_POINTER(pos_val(next->pos)));
+
+            if (known == NULL)
             {
-                g_ptr_array_add(pt->open, next);
-                next_is_better = true;
-            }
-            else if (next->g_score > next_g_score)
-            {
-                next_is_better = true;
+                /* first time this position is reached */
+                next->g_score = next_g_score;
+                next->h_score = pos_distance(next->pos, pt->goal);
+                next->parent  = curr;
+
+                g_hash_table_insert(pt->nodes,
+                        GUINT_TO_POINTER(pos_val(next->pos)), next);
+                path_heap_push(pt->open, next->g_score + next->h_score, next);
             }
             else
             {
+                /* position already known; next was only needed to carry
+                   its coordinates, the canonical node is "known" */
                 g_free(next);
-            }
 
-            if (next_is_better)
-            {
-                next->parent  = curr;
-                next->g_score = next_g_score;
+                if (!known->in_closed && next_g_score < known->g_score)
+                {
+                    known->g_score = next_g_score;
+                    known->parent  = curr;
+                    path_heap_push(pt->open, known->g_score + known->h_score, known);
+                }
             }
         }
 
@@ -125,21 +226,19 @@ void path_destroy(path *path)
 {
     g_assert(path != NULL);
 
-    /* clean up open list */
-    for (guint idx = 0; idx < path->open->len; idx++)
-    {
-        g_free(g_ptr_array_index(path->open, idx));
-    }
-    g_ptr_array_free(path->open, true);
-
-    for (guint idx = 0; idx < path->closed->len; idx++)
-    {
-        g_free(g_ptr_array_index(path->closed, idx));
-    }
-    g_ptr_array_free(path->closed, true);
+    /* the nodes table owns exactly one path_element per position ever
+       reached during the search (whether still open, closed, or a dead
+       end) - free them all here */
+    g_hash_table_destroy(path->nodes);
+    path_heap_destroy(path->open);
 
     g_queue_free(path->path);
     g_free(path);
+}
+
+static void path_element_free(gpointer el)
+{
+    g_free(el);
 }
 
 static path *path_new(position start, position goal)
@@ -149,9 +248,10 @@ static path *path_new(position start, position goal)
 
     path *pt = g_malloc0(sizeof(path));
 
-    pt->open   = g_ptr_array_new();
-    pt->closed = g_ptr_array_new();
-    pt->path   = g_queue_new();
+    pt->open  = path_heap_new();
+    pt->nodes = g_hash_table_new_full(g_direct_hash, g_direct_equal,
+                                       NULL, path_element_free);
+    pt->path  = g_queue_new();
 
     pt->start = start;
     pt->goal  = goal;
@@ -221,49 +321,6 @@ static guint path_step_cost(map *m, const path_element* element,
     }
 
     return step_cost;
-}
-
-/* Returns the total estimated cost of the best path going
-   through this new field */
-static guint path_cost(path_element* element, position target)
-{
-    /* estimate the distance from the current position to the target */
-    element->h_score = pos_distance(element->pos, target);
-
-    return element->g_score + element->h_score;
-}
-
-static path_element *path_element_in_list(const path_element* el, const GPtrArray *list)
-{
-    g_assert(el != NULL && list != NULL);
-
-    for (guint idx = 0; idx < list->len; idx++)
-    {
-        path_element *li = g_ptr_array_index(list, idx);
-
-        if (pos_identical(li->pos, el->pos))
-            return li;
-    }
-
-    return NULL;
-}
-
-static path_element *path_find_best(const path *pt)
-{
-    path_element *best = NULL;
-
-    for (guint idx = 0; idx < pt->open->len; idx++)
-    {
-        path_element *el = g_ptr_array_index(pt->open, idx);
-
-        if (best == NULL || path_cost(el, pt->goal)
-                < path_cost(best, pt->goal))
-        {
-            best = el;
-        }
-    }
-
-    return best;
 }
 
 static GPtrArray *path_get_neighbours(map *m, position pos,
