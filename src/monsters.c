@@ -826,8 +826,9 @@ monster *monster_new(monster_t type, position pos, gpointer leader)
     /* Some differentiation of the visible range per monster type */
     nmonster->visrange = max(3,
         5
-        // slower monsters see less, faster more
-        + ((monster_data[type].speed - NORMAL) / 25)
+        // Slower monsters see less, faster more.
+        // We need to cast the values to int, otherwise we get an overflow!
+        + (((int)monster_data[type].speed - (int)NORMAL) / 25)
         // flying monsters see further
         + (monster_type_flags(type, FLY) ? 2 : 0));
 
@@ -2399,10 +2400,6 @@ int monster_player_ranged_attack(monster *m, player *p)
     {
         /* don't use ranged attack when adjacent; fall back to melee */
         if (pos_adjacent(m->pos, p->pos))
-            return false;
-
-        /* don't shoot beyond visual range */
-        if (pos_distance(m->pos, p->pos) > m->visrange)
             return false;
 
         /* find ammo in monster inventory for descriptions and trajectory colour */

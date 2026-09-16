@@ -10,6 +10,8 @@
 
 ### Fixes
 
+* Fix visibility range of slow monsters. This prevents hobgoblins from
+  shooting from far away, long before they are visible
 * Make saved games robust against item changes (breaks saves)
 * Speed up pathfinding by 2.4x
 * Cache computed paths during auto-travel
