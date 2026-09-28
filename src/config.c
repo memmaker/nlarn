@@ -199,6 +199,7 @@ bool parse_ini_file(const char *filename, struct game_config *config)
 
         char *colour_scheme = g_key_file_get_string(ini_file, "nlarn", "colours", &error);
         if (!error) config->colour_scheme = ui_colour_scheme_value(colour_scheme);
+        g_free(colour_scheme);
         g_clear_error(&error);
 
 #ifdef SDLPDCURSES

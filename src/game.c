@@ -406,6 +406,12 @@ int game_save(game *g)
     free(sg);
     gzclose(file);
 
+#ifdef __EMSCRIPTEN__
+    /* web port: write the save back to IndexedDB (port/be_web.c) */
+    extern void web_sync_files(void);
+    web_sync_files();
+#endif
+
     /* if a pop-up message has been opened, destroy it here */
     if (win != NULL)
         display_window_destroy(win);

@@ -1362,6 +1362,12 @@ int main(int argc, char *argv[])
     write_ini_file(nlarn_inifile, &config);
     free_config(config);
 
+#ifdef __EMSCRIPTEN__
+    /* web port: persist the configuration (port/be_web.c) */
+    extern void web_sync_files(void);
+    web_sync_files();
+#endif
+
     return EXIT_SUCCESS;
 }
 

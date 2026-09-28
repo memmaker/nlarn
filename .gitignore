@@ -41,3 +41,6 @@ nlarn.depend
 # macOS
 .DS_Store
 po/*.mo
+
+# RVIP web port build output
+web/dist/
