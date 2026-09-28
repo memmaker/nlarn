@@ -1,5 +1,64 @@
 # NLarn RVIP handover
 
+## Next steps (orchestrator handover, 2026-09-28)
+
+Where we stand: stages 1-6 of `RVIP.md` are done, committed and pushed on
+`memmaker/nlarn` `master` (upstream base nlarn/nlarn `master` @ 8851b1f; our
+commits 696e1c5..74dca32). The RVIP-Finetuning items are done in stage 5
+(DawnLike items do not apply: Amiga set only, like larn/ularn). Lessons are
+in the "R-NLarn" section of `RVIP.md` in memmaker/rvip, branch
+`claude/beautiful-heisenberg-g88r1w` (not merged into rvip `main` yet).
+**Nothing is deployed:** the cloud container has no ssh and cannot reach
+ruzzoli.de.
+
+Remaining work, in order (one stage agent each, per `RVIP.md` "Stages and
+checkpoints"):
+
+1. **Stage 7 - Publish** (Part 1 steps 8, 9, 10, 5b; W1, W11.6):
+   - Repo README top lines: what the upstream is (link
+     https://github.com/nlarn/nlarn/tree/<full 8851b1f hash>), compare view
+     `https://github.com/memmaker/nlarn/compare/8851b1f...master` (the fork's
+     branch is `master`, not `main`). Add nlarn to the repo table in W2.
+   - Selection page (`~/Games/roguelikes-index`, `git pull` first): card in
+     `index.html` next to Larn/uLarn (12x5 or 24x5 Amiga monster tiles at 2x
+     = `img/nlarn.png`, tag "Larn variant · <first-release year>", 1-2
+     sentences, no input hints, W1 line `Based on NLarn <ver> ·
+     nlarn/nlarn @ 8851b1f`), bump "N classic roguelikes". Tree entry under
+     Larn (Joachim de Groot; check year/parent on the web and in the
+     sources). `<!--og-->` block for `web/index.html` by hand (R-Larn Ularn
+     stage 7 note), not a full `og.py` run.
+2. **Stage 8 - Shrine** (step 11): `shrine/nlarn.html` + `shrine/nlarn/`,
+   linked from card (Info), tree (✦) and the game page's `#bar h1`. Manual:
+   `lib/nlarn.hlp` (GPL-3, may be copied). Report whether a walkthrough exists.
+3. **Stage 9 - Graveyard + leaderboard** (step 12): `js_beacon` from NLarn's
+   own run-end code (death/win/quit; `player_die()` / the scoreboard entry in
+   `src/player.c` / `src/scoreboard.c`), via `RvipWM.report`; `g=nlarn`;
+   score = NLarn's own score; killer art: add nlarn to
+   `roguelikes-index/killers/make.py` (Amiga tiles via `port/tilemap.h`).
+   Test that the win path is reached (golden rule).
+
+**On the Mac, after the stages** (cloud cannot do these):
+```
+cd ~/Games/rvip-tools && git fetch && git merge origin/claude/beautiful-heisenberg-g88r1w   # RVIP.md R-NLarn, rvip-sound.js .mp3 fix
+cd ~/Games/roguelikes-index && git pull   # after merging its claude/beautiful-heisenberg-g88r1w branch
+git clone https://github.com/memmaker/nlarn ~/Games/nlarn   # or git pull
+cd ~/Games/nlarn && sh web/build.sh && sh web/deploy.sh      # build on the Mac ships the town music
+cd ~/Games/roguelikes-index && ./deploy.sh                   # card, tree, shrine, shared rvip-*.js
+git -C ~/Games/nlarn push origin --delete claude/beautiful-heisenberg-g88r1w   # stale WIP branch (proxy refused the delete)
+```
+Then the checks from the "Deploy" block below, `curl -s
+https://ruzzoli.de/roguelikes/nlarn/ | grep og:image`, and the W10 layout
+check in a real browser (headless runs miss layout problems).
+
+Open problems carried forward:
+- Translations (de/es/fr/pt) are not shipped (English only).
+- Remembered item piles show the item type's generic tile after a reload.
+- In item prompts there is no inventory/equipment/floor switch (NLarn
+  prompts show one list); Shift+letter on an undroppable item is silent.
+- Music ships only from a Mac build (`new_town.ogg` from ~/Projects).
+- Upstream bug: a SIGHUP before the name is entered saves a nameless game
+  that crashes `player_deserialize` on load (native only).
+
 ## RVIP progress
 
 **Stage 1 (get + build): done.** **Stage 2 (explore + stairs): done.**
