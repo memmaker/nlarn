@@ -169,6 +169,7 @@
 				if (s.wm) d.wm = s.wm;
 				if (typeof s.face === 'string') d.face = s.face;
 				if (typeof s.mapFace === 'string') d.mapFace = s.mapFace;
+				if (typeof s.tiles === 'string') d.tiles = s.tiles;  /* the tile set, by name */
 				if (s.audio) d.audio = { sound: s.audio.sound === true, music: s.audio.music === true };
 			}
 		} catch (err) { /* nothing saved yet */ }
@@ -254,8 +255,8 @@
 	}
 
 	function resetLayout() {
-		var a = L.audio, fc = L.face, mf = L.mapFace;
-		L = defaultLayout(); L.audio = a; L.face = fc; L.mapFace = mf; L.wm = wm.state ? wm.state() : L.wm;
+		var a = L.audio, fc = L.face, mf = L.mapFace, ts = L.tiles;
+		L = defaultLayout(); L.audio = a; L.face = fc; L.mapFace = mf; L.tiles = ts; L.wm = wm.state ? wm.state() : L.wm;
 		L.tile = mapTile();
 		for (var p = 0; p < panes.length; p++) if (panes[p]) shape(p);
 		applyDom(); saveLayout();
@@ -418,12 +419,15 @@
 		arguments: ['-D', DIR],
 		preRun: [function () {
 			var FS = Module.FS;
-			if (!tilesDone) { Module.addRunDependency('tiles'); tilesWait = true; }
+			Module.addRunDependency('tiles'); tilesWait = true;   /* the sheet loads once the layout says which */
 			FS.mkdirTree('/nlarn-data');
 			FS.chdir('/nlarn-data');             /* the data (lib/) sits next to argv[0] */
 			Module.addRunDependency('idbfs');
 			RvipApp.mount(function (err) {
 				if (err) status('Could not read saved games from IndexedDB (' + err + '). Saving may not work in this browser mode.', true);
+				if (!L) loadLayout();            /* before the game: it holds the tile set */
+				TILESETS.forEach(function (t, i) { if (t[1] === L.tiles) tileset = i; });
+				startTiles();
 				Module.removeRunDependency('idbfs');
 			});
 		}],
@@ -434,9 +438,9 @@
 		onAbort: function (what) { app.crashed(what); }
 	};
 
-	/* tile sets: the Amiga tiles or none (text); a per-browser preference */
+	/* tile sets: the Amiga tiles or none (text); the choice is kept by name in the
+	   layout file (IndexedDB), never localStorage */
 	var TILESETS = [['tiles.png', 'Amiga'], [null, 'None']], tileset = 0;
-	try { tileset = (+localStorage.getItem('nlarn-tileset') || 0) % TILESETS.length; } catch (err) { /* no storage */ }
 	function tilesFinished(ok) {
 		tilesReady = ok && !!TILESETS[tileset][0]; tilesDone = true;   /* None picked meanwhile: stay text */
 		if (!ok) status('Could not load the tile set; using text.', true);
@@ -447,7 +451,7 @@
 	function renderTileset() { var b = $('btn-tiles'); if (b) b.textContent = 'Tiles: ' + TILESETS[tileset][1]; }
 	function toggleTileset() {
 		tileset = (tileset + 1) % TILESETS.length;
-		try { localStorage.setItem('nlarn-tileset', String(tileset)); } catch (err) { /* no storage */ }
+		L.tiles = TILESETS[tileset][1]; saveLayout();
 		renderTileset();
 		var redraw = function () {
 			[P_MAP, P_INV].forEach(function (p) { if (panes[p]) shape(p); });
@@ -490,7 +494,11 @@
 		s.style.cssText = 'width:8px;margin:0 4px;image-rendering:pixelated;background:url(' + tiles.src + ') -' + (t % PER_ROW) * TW + 'px -' + ((t / PER_ROW) | 0) * TH + 'px';
 		return s;
 	}
-	if (TILESETS[tileset][0]) tiles.src = TILESETS[tileset][0]; else tilesDone = true;
+	function startTiles() {
+		renderTileset();
+		if (TILESETS[tileset][0]) tiles.src = TILESETS[tileset][0];
+		else { tilesDone = true; if (tilesWait) { tilesWait = false; Module.removeRunDependency('tiles'); } }   /* None: text */
+	}
 
 	/* autosave: every 2 minutes and when the page is hidden (the game saves at its command prompt) */
 	setInterval(function () { saveReq = true; }, 120000);
