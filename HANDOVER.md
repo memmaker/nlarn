@@ -266,6 +266,9 @@ Stage 2 facts:
   v1.3.2 https://github.com/madler/zlib` plus a `.emscripten_url` file holding the
   archive URL; on the Mac `-sUSE_ZLIB=1` just downloads.
 
-Open problems: translations not shipped (English only, `g_get_language_names()` =
+Open problems: the parking branch `claude/beautiful-heisenberg-g88r1w` (stage-5 WIP,
+now merged into master as a single commit) is still on GitHub: the cloud git proxy
+refused the delete (403); remove it on the Mac with `git push origin --delete
+claude/beautiful-heisenberg-g88r1w`. Translations not shipped (English only, `g_get_language_names()` =
 "C"). NLarn's own pop-up windows are sized for the 90x25 screen (the command menu
 scrolls); the layout check on the Mac in a real browser is still to do (W10).
