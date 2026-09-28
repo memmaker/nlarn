@@ -97,6 +97,7 @@ Stage 6 facts:
   only if `~/Projects/heavenAndHell/files/mods/heavenandhell/music/new_town.ogg` exists (the
   Mac); the cloud build has none, so switching Music on greys the checkbox out ("No music
   in this build"). **Rebuild on the Mac to ship the music.**
+- **Deploy:** `rvip-sound.js` changed (rvip-tools 0cf7db7): run `roguelikes-index/deploy.sh` too.
 - Audio off by default, stored in `web-layout.json` (`audio.sound/music`). Favicon `data:`.
 - **Help** (`web/make-help.py`): essentials, full key list from `lib/nlarn.hlp`, keys to
   remember (`?`, `X`, Enter, `i`, `<`/`>`, `^S`), saving, tips, new-player guide, In the
