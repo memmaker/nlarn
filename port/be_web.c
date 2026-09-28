@@ -24,17 +24,20 @@ EM_JS(void, js_init, (int p, int cols, int rows), {
 EM_JS(void, js_draw, (int p, uint32_t *cells, int cols, int y0, int y1, int cy, int cx), {
     Module.nl.draw(p, cells >> 2, cols, y0, y1, cy, cx);
 });
-EM_JS(void, js_extent, (int p, int cols, int rows), {
-    if (Module.nl.extent) Module.nl.extent(p, cols, rows);
+EM_JS(void, js_line, (int p, int y, const char *s, const char *css, int tile), {
+    Module.nl.line(p, y, UTF8ToString(s), UTF8ToString(css), tile);
+});
+EM_JS(void, js_rows, (int p, int n), {
+    Module.nl.rows(p, n);
+});
+EM_JS(void, js_cursor, (int p, int y, int x), {
+    Module.nl.cursor(p, y, x);
 });
 EM_JS(int, js_key, (int at_cmd), {
     return Module.nl.key(at_cmd);
 });
 EM_JS(void, js_popup, (int rows, int cols, int y0, int x0), {
     Module.nl.popup(rows, cols, y0, x0);
-});
-EM_JS(void, js_rowtile, (int p, int y, int t), {
-    Module.nl.rowtile(p, y, t);
 });
 EM_JS(int, js_icons, (void), {
     return Module.nl.icons();
@@ -76,26 +79,21 @@ static void alloc_pane(int p, int cols, int rows)
     q->cy = -1;
 }
 
+/* only the map is a cell grid (canvas); text panes are lines (RVIP W0 rule 6) */
 void be_init(int p, int cols, int rows)
 {
-    alloc_pane(p, cols, rows);
+    if (p == P_MAP) alloc_pane(p, cols, rows);
     js_init(p, cols, rows);
 }
 
 void be_popup(int rows, int cols, int y0, int x0)
 {
-    if (rows > 0 && cols > 0)
-        alloc_pane(P_POP, cols, rows);
-    else
-    {
-        free(panes[P_POP].cells);
-        panes[P_POP].cells = NULL;
-        rows = cols = 0;
-    }
+    if (rows <= 0 || cols <= 0) rows = cols = 0;
     js_popup(rows, cols, y0, x0);
 }
 
-void be_rowtile(int p, int y, int tile) { js_rowtile(p, y, tile); }
+void be_line(int p, int y, const char *s, const char *css, int tile) { js_line(p, y, s, css, tile); }
+void be_rows(int p, int n) { js_rows(p, n); }
 int be_icons(void) { return js_icons(); }
 void be_hero(int y, int x, int level) { js_hero(y, x, level); }
 void be_prompt(const char *s)
@@ -128,7 +126,7 @@ static void autosave(void)
 void be_put(int p, int y, int x, uint32_t ch, uint32_t fg, uint32_t bg, int attr, int tile)
 {
     pane *q = &panes[p];
-    if (!q->cells || y < 0 || x < 0 || y >= q->rows || x >= q->cols) return;
+    if (p != P_MAP || !q->cells || y < 0 || x < 0 || y >= q->rows || x >= q->cols) return;
     uint32_t *c = &q->cells[(y * q->cols + x) * 4];
     c[0] = ch;
     c[1] = fg;
@@ -141,6 +139,7 @@ void be_put(int p, int y, int x, uint32_t ch, uint32_t fg, uint32_t bg, int attr
 void be_cursor(int p, int y, int x)
 {
     pane *q = &panes[p];
+    if (p != P_MAP) { js_cursor(p, y, x); return; }   /* a text pane's cursor (wcurses.c sends changes) */
     if (q->cy != y || q->cx != x)
     {
         /* redraw the rows of the old and the new cursor */
@@ -150,8 +149,6 @@ void be_cursor(int p, int y, int x)
     q->cy = y;
     q->cx = x;
 }
-
-void be_extent(int p, int cols, int rows) { js_extent(p, cols, rows); }
 
 void be_flush(void)
 {

@@ -17,16 +17,22 @@ enum { P_MAP, P_STATUS, P_MSG, P_INV, P_POP, NPANES };
 #define BE_BOLD 1
 #define BE_UNDERLINE 2
 #define BE_BLINK 4
+#define BE_REVERSE 8   /* text panes: standout (the page shows the map's bg) */
 
 void be_init(int pane, int cols, int rows);
 /* tile: -1 = text; else a tile id of web/tiles.png (port/tilemap.h),
  * | TILE_DIM (0x8000, port/tiles.h) for a remembered cell drawn dimmed */
-void be_put(int pane, int y, int x, uint32_t ch, uint32_t fg, uint32_t bg, int attr, int tile);
+void be_put(int pane, int y, int x, uint32_t ch, uint32_t fg, uint32_t bg, int attr, int tile); /* P_MAP only */
 void be_cursor(int pane, int y, int x);       /* y < 0: hidden */
-void be_extent(int pane, int cols, int rows); /* cells in use (text panes) */
+/* text panes (P_STATUS, P_MSG, P_INV, P_POP; RVIP W0 rule 6): row y as
+ * trimmed text, reverse-video cells between \x01 and \x02, cell colours
+ * as runs "\x05#rrggbb" (bold: "\x05*#rrggbb"; own background: "/#rrggbb"
+ * appended) ... "\x06"; the row's colour
+ * ("" = default) and icon tile (-1 none); and the rows in use */
+void be_line(int pane, int y, const char *text, const char *css, int tile);
+void be_rows(int pane, int rows);
 void be_flush(void);
 void be_popup(int rows, int cols, int y0, int x0); /* rows 0: closed; y0/x0: screen origin (mouse) */
-void be_rowtile(int pane, int y, int tile);   /* a row's icon (Inventory), -1 none */
 int be_icons(void);                           /* a tile set is shown (Inventory rows get icons) */
 void be_hero(int y, int x, int level);        /* the player's map cell: the page centres on it */
 void be_prompt(const char *s);                /* prompt line over the map (newest message) */

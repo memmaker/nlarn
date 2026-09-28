@@ -387,3 +387,16 @@ refused the delete (403); remove it on the Mac with `git push origin --delete
 claude/beautiful-heisenberg-g88r1w`. Translations not shipped (English only, `g_get_language_names()` =
 "C"). NLarn's own pop-up windows are sized for the 90x25 screen (the command menu
 scrolls); the layout check on the Mac in a real browser is still to do (W10).
+
+### W0 rule 6 (text windows as HTML) — 2026-09-28
+
+- Status, Messages, Inventory and the pop-up are HTML lines from the shim (`port/wcurses.c`
+  `send_text`: `be_line`, `be_rows`, `wc_rowattr`; `be_extent`/`be_rowtile`/`wc_rowtile` gone),
+  as ularn 6229406. The map is the only canvas (`be_put` is map only); one `cursor()` helper.
+- Runs: `"\x05#rrggbb"` (bold `"\x05*#rrggbb"`) … `"\x06"`, reverse video between `\x01`/`\x02`.
+  NLarn extension: a background other than the pane's (menu/inventory highlight bars) is
+  appended as `"/#rrggbb"`. The pop-up's own box colour (dark blue) is not sent: pop-ups
+  show on black.
+- Pop-up clicks: row = line of the `<pre>`, column = caret offset under the pointer.
+- Inventory/Visible icons: CSS sprites sized in em (1.2em high), grow with A+.
+- Native build unchanged (real ncurses; the web code is `#ifdef __EMSCRIPTEN__`).

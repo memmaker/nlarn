@@ -207,10 +207,11 @@ int set_escdelay(int ms);
  * character and attributes it has now (port/tiles.c) */
 void wc_settile(int y, int x, int tile);
 /* RVIP W4: a window (not a panel) that is a whole pane of its own (be.h
- * P_MSG, P_INV); sent on doupdate() when changed, trimmed to its used
- * extent. wc_rowtile: that row's icon tile (-1 none). */
+ * P_MSG, P_INV); sent on doupdate() as trimmed lines (be_line) when
+ * changed. wc_rowattr: a text pane row's colour ("" = default) and icon
+ * tile (-1 none). */
 void wc_pane(WINDOW *w, int pane);
-void wc_rowtile(WINDOW *w, int y, int tile);
+void wc_rowattr(int pane, int y, const char *css, int tile);
 uint32_t wc_rgb(int colour);   /* palette colour -> 0xRRGGBB */
 
 #define getmaxx(w) ((w) ? (w)->maxx : ERR)

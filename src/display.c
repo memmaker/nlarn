@@ -667,8 +667,8 @@ void display_paint_screen(player *p)
 
 #ifdef __EMSCRIPTEN__
 /* RVIP W4: the web page's Messages and Inventory windows, drawn by the game
- * into windows of their own (port/wcurses.c wc_pane(): sent trimmed to
- * their used extent). */
+ * into windows of their own (port/wcurses.c wc_pane(): sent as trimmed
+ * lines, RVIP W0). */
 #define WEB_MSG_ROWS 200   /* message history kept in the Messages window */
 #define WEB_INV_ROWS 120
 #define WEB_INV_COLS 64
@@ -748,7 +748,7 @@ static void display_web_inventory(player *p)
         wc_pane(iw, P_INV);
     }
     werase(iw);
-    for (int y = 0; y < WEB_INV_ROWS; y++) wc_rowtile(iw, y, -1);
+    for (int y = 0; y < WEB_INV_ROWS; y++) wc_rowattr(P_INV, y, "", -1);
 
     /* the order and the category headings of the inventory list (i) */
     const bool icons = be_icons();
@@ -772,15 +772,15 @@ static void display_web_inventory(player *p)
         gchar *desc = item_describe_gc(it, player_item_known(p, it), false, false, GC_NOM);
         const bool eq = player_item_is_equipped(p, it);
         const attr_t ca = COLOR_PAIR(item_colour(it));
-        /* icons: "a)   name" (the icon over cols 2-4); text: "a) ! name" */
+        /* icons: "a) name" (the page puts the icon first); text: "a) ! name" */
         mvwaprintw(iw, row, 0, COLOR_PAIR(OSLO_GREY), "%c%c", letter, letter == ' ' ? ' ' : ')');
         if (!icons)
         {
             wmove(iw, row, 3);
             waddwach(iw, item_glyph(it->type), (short)item_colour(it), 0);
         }
-        mvwaprintw(iw, row, 5, ca | (eq ? A_BOLD : 0), "%s%s", desc, eq ? " *" : "");
-        if (icons) wc_rowtile(iw, row, tiles_item(it));
+        mvwaprintw(iw, row, icons ? 3 : 5, ca | (eq ? A_BOLD : 0), "%s%s", desc, eq ? " *" : "");
+        if (icons) wc_rowattr(P_INV, row, "", tiles_item(it));
         g_free(desc);
         row++;
     }
