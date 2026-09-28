@@ -1,11 +1,11 @@
 /* In-memory curses + panels for the NLarn web port (RVIP R-frontend).
  *
- * Windows are cell grids. doupdate() composes stdscr and the visible panels
- * (bottom to top) into one frame, resolves each cell's colour pair and
- * attributes to RGB, and routes the cells that changed to the frontend
- * panes (be.h). Stage 1 routes the whole frame to P_SCREEN; route() is the
- * place where stdscr regions (map, status, messages) and panels (pop-ups)
- * get their own panes later (RVIP W0). */
+ * Windows are cell grids. doupdate() resolves each cell's colour pair and
+ * attributes to RGB and sends the cells that changed to the frontend panes
+ * (be.h): stdscr regions to the map and status panes (route()), windows
+ * registered with wc_pane() to their own panes (messages, inventory), and
+ * the visible panels, composed bottom to top into their bounding box, to
+ * the pop-up pane (RVIP W0). */
 #include <curses.h>
 #include <panel.h>
 #include <stdio.h>
@@ -13,6 +13,14 @@
 #include <string.h>
 
 #include "be.h"
+
+/* screen regions of src/display.c (see route()) */
+#define MAP_W 67              /* MAP_MAX_X */
+#define MAP_H 17              /* MAP_MAX_Y */
+#define SEG2 (MAP_W - 21)     /* the HP/MP, XP segment of the lines under the map */
+#define ST_W 46               /* Status pane: the widest segment */
+#define ST_H (6 + MAP_H)
+void wc_unpane(WINDOW *w);
 
 WINDOW *stdscr = NULL, *curscr = NULL;
 int LINES = 25, COLS = 90, ESCDELAY = 0;
@@ -22,14 +30,16 @@ static int cursor_vis = 0;
 static WINDOW *cursor_win = NULL;      /* the window refreshed last */
 static PANEL *bottom = NULL, *top = NULL;
 
-/* composed frame, and what the frontend shows (resolved colours) */
+/* what the frontend shows of stdscr (resolved colours) */
 typedef struct { uint32_t ch, fg, bg; int attr, tile; } sent_cell;
-static wc_cell *frame = NULL;
-static bool *from_std = NULL;           /* frame cell comes from stdscr */
 /* tiles of stdscr cells, each with the cell it was set for (port/tiles.c) */
 typedef struct { wc_cell c; int tile; } tile_cell;
 static tile_cell *tiles = NULL;
 static sent_cell *shown = NULL;
+/* pop-up pane: the visible panels composed into their bounding box */
+static wc_cell *popc = NULL;
+static bool *popcov = NULL;
+static sent_cell *pop_shown = NULL;
 static bool full_redraw = true;
 
 /* ------------------------------------------------------------ colours */
@@ -142,6 +152,7 @@ int delwin(WINDOW *w)
 {
     if (!w) return ERR;
     if (cursor_win == w) cursor_win = NULL;
+    wc_unpane(w);
     free(w->c);
     free(w);
     full_redraw = true;
@@ -170,12 +181,14 @@ WINDOW *initscr(void)
     palette_init();
     stdscr = newwin(LINES, COLS, 0, 0);
     curscr = stdscr;
-    frame = calloc((size_t)LINES * (size_t)COLS, sizeof *frame);
     shown = calloc((size_t)LINES * (size_t)COLS, sizeof *shown);
-    from_std = calloc((size_t)LINES * (size_t)COLS, sizeof *from_std);
+    popc = calloc((size_t)LINES * (size_t)COLS, sizeof *popc);
+    popcov = calloc((size_t)LINES * (size_t)COLS, sizeof *popcov);
+    pop_shown = calloc((size_t)LINES * (size_t)COLS, sizeof *pop_shown);
     tiles = calloc((size_t)LINES * (size_t)COLS, sizeof *tiles);
     for (int i = 0; i < LINES * COLS; i++) tiles[i].tile = -1;
-    be_init(P_SCREEN, COLS, LINES);
+    be_init(P_MAP, MAP_W, MAP_H);
+    be_init(P_STATUS, ST_W, ST_H);
     return stdscr;
 }
 
@@ -576,27 +589,51 @@ void update_panels(void) { }
 
 /* ------------------------------------------------------ compose + route */
 
-static void blit(WINDOW *w)
+/* stdscr regions (src/display.c): the map is rows 0..16 x cols 0..66
+ * (MAP_MAX_Y x MAP_MAX_X), its border row 17 / col 67; the right status
+ * column starts at col 68; two status lines at rows 18-19 in three
+ * segments (name / level at col 0, HP MP / XP at col 46, turn / dungeon
+ * level at col 68); messages from row 20 (not routed: P_MSG comes from
+ * the game's history window). The Status pane stacks them: rows 0-1 the
+ * first segment, 2-3 the second, 4-5 the third, 6.. the right column. */
+
+static bool region(int y, int x, int *p, int *py, int *px)
 {
-    for (int y = 0; y < w->maxy; y++)
+    if (y < MAP_H && x < MAP_W) { *p = P_MAP; *py = y; *px = x; return true; }
+    if (y < MAP_H && x > MAP_W) { *p = P_STATUS; *py = 6 + y; *px = x - MAP_W - 1; return true; }
+    if (y == MAP_H + 1 || y == MAP_H + 2)
     {
-        int sy = w->begy + y;
-        if (sy < 0 || sy >= LINES) continue;
-        for (int x = 0; x < w->maxx; x++)
-        {
-            int sx = w->begx + x;
-            if (sx < 0 || sx >= COLS) continue;
-            frame[sy * COLS + sx] = w->c[y * w->maxx + x];
-            from_std[sy * COLS + sx] = w == stdscr;
-        }
+        int r = y - MAP_H - 1;
+        *p = P_STATUS;
+        if (x < SEG2) { *py = r; *px = x; }
+        else if (x <= MAP_W) { *py = 2 + r; *px = x - SEG2; }
+        else { *py = 4 + r; *px = x - MAP_W - 1; }
+        return *px < ST_W;
     }
-    w->touched = false;
+    return false;
 }
 
-/* Stage 1: the whole screen is one pane. */
+/* used extent of a text pane (W0: the game trims, the page never does) */
+static int ext_c[NPANES], ext_r[NPANES];
+static void extent(int p, int cols, int rows)
+{
+    if (cols < 1) cols = 1;
+    if (rows < 1) rows = 1;
+    if (cols != ext_c[p] || rows != ext_r[p])
+    {
+        ext_c[p] = cols;
+        ext_r[p] = rows;
+        be_extent(p, cols, rows);
+    }
+}
+static uint32_t st_ch[ST_H][ST_W];   /* Status pane characters, for its extent */
+
 static void route(int y, int x, const sent_cell *c)
 {
-    be_put(P_SCREEN, y, x, c->ch, c->fg, c->bg, c->attr, c->tile);
+    int p, py, px;
+    if (!region(y, x, &p, &py, &px)) return;
+    be_put(p, py, px, c->ch, c->fg, c->bg, c->attr, c->tile);
+    if (p == P_STATUS) st_ch[py][px] = c->ch == ' ' && !(c->bg & 0xffffff) ? 0 : c->ch;
 }
 
 void wc_settile(int y, int x, int tile)
@@ -610,10 +647,147 @@ void wc_settile(int y, int x, int tile)
 
 static int tile_at(int y, int x)
 {
-    int i = y * COLS + x;
-    const tile_cell *t = &tiles[i];
-    if (t->tile < 0 || !from_std[i]) return -1;
-    return t->c.ch == frame[i].ch && t->c.attr == frame[i].attr ? t->tile : -1;
+    const tile_cell *t = &tiles[y * COLS + x];
+    const wc_cell *c = &stdscr->c[y * stdscr->maxx + x];
+    if (t->tile < 0) return -1;
+    return t->c.ch == c->ch && t->c.attr == c->attr ? t->tile : -1;
+}
+
+uint32_t wc_rgb(int colour) { return palette[colour & 255]; }
+
+/* windows that are panes of their own (P_MSG, P_INV) */
+typedef struct { WINDOW *w; sent_cell *shown; int *tile, *tile_sent; bool full; } pane_win;
+static pane_win pwins[NPANES];
+
+void wc_pane(WINDOW *w, int pane)
+{
+    pane_win *q = &pwins[pane];
+    q->w = w;
+    free(q->shown); free(q->tile); free(q->tile_sent);
+    q->shown = calloc((size_t)w->maxy * (size_t)w->maxx, sizeof *q->shown);
+    q->tile = malloc(sizeof(int) * (size_t)w->maxy);
+    q->tile_sent = malloc(sizeof(int) * (size_t)w->maxy);
+    for (int y = 0; y < w->maxy; y++) q->tile[y] = q->tile_sent[y] = -1;
+    q->full = true;
+    w->touched = true;
+    be_init(pane, w->maxx, w->maxy);
+    ext_c[pane] = ext_r[pane] = 0;
+}
+
+void wc_rowtile(WINDOW *w, int y, int tile)
+{
+    for (int p = 0; p < NPANES; p++)
+        if (pwins[p].w == w && y >= 0 && y < w->maxy) pwins[p].tile[y] = tile;
+}
+
+static void pane_flush(int p)
+{
+    pane_win *q = &pwins[p];
+    WINDOW *w = q->w;
+    if (!w || (!w->touched && !q->full && !full_redraw)) return;
+    int ec = 0, er = 0;
+    for (int y = 0; y < w->maxy; y++)
+    {
+        for (int x = 0; x < w->maxx; x++)
+        {
+            const wc_cell *c = &w->c[y * w->maxx + x];
+            sent_cell s;
+            s.ch = c->ch;
+            resolve(c->attr, &s.fg, &s.bg, &s.attr);
+            s.tile = -1;
+            if (s.ch != ' ' || (s.bg & 0xffffff)) { if (x + 1 > ec) ec = x + 1; er = y + 1; }
+            sent_cell *o = &q->shown[y * w->maxx + x];
+            if (q->full || full_redraw || memcmp(o, &s, sizeof s))
+            {
+                *o = s;
+                be_put(p, y, x, s.ch, s.fg, s.bg, s.attr, -1);
+            }
+        }
+        if (q->tile[y] >= 0 && (ec < 5)) ec = 5;   /* an icon row */
+        if (q->tile[y] != q->tile_sent[y] || q->full)
+        {
+            q->tile_sent[y] = q->tile[y];
+            be_rowtile(p, y, q->tile[y]);
+        }
+    }
+    q->full = false;
+    w->touched = false;
+    extent(p, ec, er);
+}
+
+void wc_unpane(WINDOW *w)
+{
+    for (int p = 0; p < NPANES; p++)
+        if (pwins[p].w == w) pwins[p].w = NULL;
+}
+
+/* pop-ups: the visible panels, composed into their bounding box */
+static int pop_y0, pop_x0, pop_h, pop_w;
+
+static void pop_flush(void)
+{
+    int y0 = LINES, x0 = COLS, y1 = 0, x1 = 0;
+    for (PANEL *p = bottom; p; p = p->above)
+    {
+        if (p->hidden) continue;
+        WINDOW *w = p->win;
+        if (w->begy < y0) y0 = w->begy;
+        if (w->begx < x0) x0 = w->begx;
+        if (w->begy + w->maxy > y1) y1 = w->begy + w->maxy;
+        if (w->begx + w->maxx > x1) x1 = w->begx + w->maxx;
+    }
+    if (y0 < 0) y0 = 0;
+    if (x0 < 0) x0 = 0;
+    if (y1 > LINES) y1 = LINES;
+    if (x1 > COLS) x1 = COLS;
+    int h = y1 > y0 ? y1 - y0 : 0, w = x1 > x0 ? x1 - x0 : 0;
+    bool fresh = false;
+    if (h != pop_h || w != pop_w || y0 != pop_y0 || x0 != pop_x0)
+    {
+        pop_h = h; pop_w = w; pop_y0 = y0; pop_x0 = x0;
+        be_popup(h, w, y0, x0);
+        fresh = true;
+    }
+    if (!h || !w) return;
+    memset(popcov, 0, sizeof(bool) * (size_t)LINES * (size_t)COLS);
+    for (PANEL *p = bottom; p; p = p->above)
+    {
+        if (p->hidden) continue;
+        WINDOW *win = p->win;
+        for (int y = 0; y < win->maxy; y++)
+            for (int x = 0; x < win->maxx; x++)
+            {
+                int sy = win->begy + y - y0, sx = win->begx + x - x0;
+                if (sy < 0 || sx < 0 || sy >= h || sx >= w) continue;
+                popc[sy * w + sx] = win->c[y * win->maxx + x];
+                popcov[sy * w + sx] = true;
+            }
+        win->touched = false;
+    }
+    for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++)
+        {
+            sent_cell s = { ' ', 0, 0, 0, -1 };
+            if (popcov[y * w + x])
+            {
+                const wc_cell *c = &popc[y * w + x];
+                s.ch = c->ch;
+                resolve(c->attr, &s.fg, &s.bg, &s.attr);
+            }
+            sent_cell *o = &pop_shown[y * w + x];
+            if (fresh || full_redraw || memcmp(o, &s, sizeof s))
+            {
+                *o = s;
+                be_put(P_POP, y, x, s.ch, s.fg, s.bg, s.attr, -1);
+            }
+        }
+}
+
+static bool panel_shown(WINDOW *w)
+{
+    for (PANEL *p = bottom; p; p = p->above)
+        if (p->win == w && !p->hidden) return true;
+    return false;
 }
 
 int wnoutrefresh(WINDOW *w)
@@ -625,13 +799,11 @@ int wnoutrefresh(WINDOW *w)
 int doupdate(void)
 {
     if (!stdscr) return ERR;
-    blit(stdscr);
-    for (PANEL *p = bottom; p; p = p->above)
-        if (!p->hidden) blit(p->win);
-    for (int y = 0; y < LINES; y++)
-        for (int x = 0; x < COLS; x++)
+    /* stdscr regions: map and status */
+    for (int y = 0; y < LINES && y < stdscr->maxy; y++)
+        for (int x = 0; x < COLS && x < stdscr->maxx; x++)
         {
-            const wc_cell *c = &frame[y * COLS + x];
+            const wc_cell *c = &stdscr->c[y * stdscr->maxx + x];
             sent_cell s;
             s.ch = c->ch;
             resolve(c->attr, &s.fg, &s.bg, &s.attr);
@@ -643,12 +815,35 @@ int doupdate(void)
                 route(y, x, &s);
             }
         }
+    stdscr->touched = false;
+    {
+        int ec = 0, er = 0;
+        for (int y = 0; y < ST_H; y++)
+            for (int x = 0; x < ST_W; x++)
+                if (st_ch[y][x]) { if (x + 1 > ec) ec = x + 1; er = y + 1; }
+        extent(P_STATUS, ec, er);
+    }
+    for (int p = 0; p < NPANES; p++) pane_flush(p);
+    pop_flush();
     full_redraw = false;
+
+    /* the cursor: in a pop-up, or on the map (targeting) */
+    int cp = -1, cy = -1, cx = -1;
     WINDOW *cw = cursor_win ? cursor_win : stdscr;
     if (cursor_vis)
-        be_cursor(P_SCREEN, cw->begy + cw->cury, cw->begx + cw->curx);
-    else
-        be_cursor(P_SCREEN, -1, -1);
+    {
+        int sy = cw->begy + cw->cury, sx = cw->begx + cw->curx;
+        if (cw != stdscr && panel_shown(cw) && pop_h)
+        {
+            cp = P_POP; cy = sy - pop_y0; cx = sx - pop_x0;
+        }
+        else if (cw == stdscr && sy < MAP_H && sx < MAP_W)
+        {
+            cp = P_MAP; cy = sy; cx = sx;
+        }
+    }
+    for (int p = 0; p < NPANES; p++)
+        be_cursor(p, p == cp ? cy : -1, p == cp ? cx : -1);
     be_flush();
     return OK;
 }

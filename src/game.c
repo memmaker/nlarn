@@ -253,7 +253,13 @@ int game_save(game *g)
     g_assert(g != NULL);
 
     /* if the display has been initialised, show a pop-up message */
+#ifdef __EMSCRIPTEN__
+    /* web port: the autosave (port/be_web.c) leaves the screen alone */
+    extern int web_autosaving;
+    if (display_available() && !web_autosaving)
+#else
     if (display_available())
+#endif
         win = display_popup(2, 2, 0, NULL, _("Saving...."), 0);
 
     struct cJSON *save = cJSON_CreateObject();

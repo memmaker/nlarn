@@ -46,6 +46,9 @@ const int DEFAULT_COLS = 90;
 #include "spheres.h"
 #ifdef __EMSCRIPTEN__
 #include "tiles.h"   /* RVIP: map tiles (port/tiles.c) */
+#include "be.h"      /* RVIP: panes (port/be.h) */
+void display_web_panes(player *p);
+static int item_sort_normal(gconstpointer a, gconstpointer b, gpointer data);
 #endif
 
 static bool display_initialised = false;
@@ -655,8 +658,144 @@ void display_paint_screen(player *p)
 
     text_destroy(text);
 
+#ifdef __EMSCRIPTEN__
+    display_web_panes(p);   /* RVIP: Messages and Inventory windows */
+#endif
+
     display_draw();
 }
+
+#ifdef __EMSCRIPTEN__
+/* RVIP W4: the web page's Messages and Inventory windows, drawn by the game
+ * into windows of their own (port/wcurses.c wc_pane(): sent trimmed to
+ * their used extent). */
+#define WEB_MSG_ROWS 200   /* message history kept in the Messages window */
+#define WEB_INV_ROWS 120
+#define WEB_INV_COLS 64
+
+static void display_web_messages(void)
+{
+    static WINDOW *mw = NULL;
+    if (mw == NULL)
+    {
+        mw = newwin(WEB_MSG_ROWS, COLS, 0, 0);
+        wc_pane(mw, P_MSG);
+    }
+
+    /* entries newest first (the turn's pending text first), as many as fill
+       the window; shown oldest first, the newest at the bottom */
+    GPtrArray *ents = g_ptr_array_new();
+    guint times[WEB_MSG_ROWS];
+    guint total = 0, i = 0;
+
+    if (log_buffer(nlarn->log))
+    {
+        GPtrArray *t = text_wrap(log_buffer(nlarn->log), COLS, 2);
+        times[ents->len] = game_turn(nlarn);
+        g_ptr_array_add(ents, t);
+        total += t->len;
+    }
+    while (total < WEB_MSG_ROWS && i < log_length(nlarn->log) && ents->len < WEB_MSG_ROWS)
+    {
+        message_log_entry *le = log_get_entry(nlarn->log, log_length(nlarn->log) - 1 - i);
+        GPtrArray *t = text_wrap(le->message, COLS, 2);
+        times[ents->len] = le->gtime;
+        g_ptr_array_add(ents, t);
+        total += t->len;
+        i++;
+    }
+
+    werase(mw);
+    guint skip = total > WEB_MSG_ROWS ? total - WEB_MSG_ROWS : 0;
+    int row = 0;
+    for (int e = (int)ents->len - 1; e >= 0; e--)
+    {
+        GPtrArray *t = g_ptr_array_index(ents, e);
+        attr_t def_attrs = (e == 0 && times[0] > game_turn(nlarn) - 5)
+            ? COLOR_PAIR(WHITE) : COLOR_PAIR(OSLO_GREY);
+        attr_t currattr = COLOURLESS;
+        for (guint j = 0; j < t->len; j++)
+        {
+            if (skip) { skip--; continue; }
+            currattr = mvwcprintw(mw, def_attrs, currattr, BLACK, row++, 0,
+                                  g_ptr_array_index(t, j));
+        }
+        text_destroy(t);
+    }
+    g_ptr_array_free(ents, TRUE);
+
+    /* the prompt line over the map: this turn's messages, without tags */
+    GString *pr = g_string_new(NULL);
+    for (const char *c = log_buffer(nlarn->log); c && *c; c++)
+    {
+        if (*c == '`')
+        {
+            const char *e = strchr(c + 1, '`');
+            if (e) { c = e; continue; }
+        }
+        g_string_append_c(pr, *c);
+    }
+    be_prompt(pr->str);
+    g_string_free(pr, TRUE);
+}
+
+static void display_web_inventory(player *p)
+{
+    static WINDOW *iw = NULL;
+    if (iw == NULL)
+    {
+        iw = newwin(WEB_INV_ROWS, WEB_INV_COLS, 0, 0);
+        wc_pane(iw, P_INV);
+    }
+    werase(iw);
+    for (int y = 0; y < WEB_INV_ROWS; y++) wc_rowtile(iw, y, -1);
+
+    /* the order and the category headings of the inventory list (i) */
+    const bool icons = be_icons();
+    inv_sort(p->inventory, (GCompareDataFunc)item_sort_normal, (gpointer)p);
+    item_t last = IT_NONE;
+    int row = 0;
+    guint ord = 0;
+    for (guint n = 0; n < inv_length(p->inventory) && row < WEB_INV_ROWS; n++)
+    {
+        item *it = inv_get(p->inventory, n);
+        if (it->type != last)
+        {
+            last = it->type;
+            gchar *cat = str_capitalize(g_strdup(item_name_pl(it->type)));
+            mvwaprintw(iw, row++, 0, COLOR_PAIR(OSLO_GREY), "%s", cat);
+            g_free(cat);
+            if (row >= WEB_INV_ROWS) break;
+        }
+        const char letter = ord < 26 ? (char)('a' + ord) : ' ';
+        ord++;
+        gchar *desc = item_describe_gc(it, player_item_known(p, it), false, false, GC_NOM);
+        const bool eq = player_item_is_equipped(p, it);
+        const attr_t ca = COLOR_PAIR(item_colour(it));
+        /* icons: "a)   name" (the icon over cols 2-4); text: "a) ! name" */
+        mvwaprintw(iw, row, 0, COLOR_PAIR(OSLO_GREY), "%c%c", letter, letter == ' ' ? ' ' : ')');
+        if (!icons)
+        {
+            wmove(iw, row, 3);
+            waddwach(iw, item_glyph(it->type), (short)item_colour(it), 0);
+        }
+        mvwaprintw(iw, row, 5, ca | (eq ? A_BOLD : 0), "%s%s", desc, eq ? " *" : "");
+        if (icons) wc_rowtile(iw, row, tiles_item(it));
+        g_free(desc);
+        row++;
+    }
+    if (row == 0)
+    {
+        mvwaprintw(iw, 0, 0, COLOR_PAIR(OSLO_GREY), "%s", _("(empty)"));
+    }
+}
+
+void display_web_panes(player *p)
+{
+    display_web_messages();
+    display_web_inventory(p);
+}
+#endif
 
 void display_shutdown()
 {

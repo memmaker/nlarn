@@ -10,6 +10,7 @@
  * pass drew, so animations, the targeting cursor and pop-ups stay text. */
 #include <curses.h>
 #include <glib.h>
+#include <stdlib.h>
 
 #include "display.h"
 #include "extdefs.h"
@@ -22,6 +23,7 @@
 #include "spheres.h"
 #include "tiles.h"
 #include "tilemap.h"
+#include "be.h"
 
 #define N(a) ((int)(sizeof(a) / sizeof((a)[0])))
 #define AT(a, i) ((i) >= 0 && (i) < N(a) ? (a)[i] : -1)
@@ -162,4 +164,71 @@ void tiles_paint(player *p)
     }
 
     wc_settile(Y(p->pos), X(p->pos), PLAYER_TILE);
+
+    be_hero(Y(p->pos), X(p->pos), Z(p->pos));
+    tiles_visible(p);
+}
+
+/* Visible window (RVIP W4): monsters the map shows (nearest first), then
+ * the items lying in view; glyph, name, colour and tile from the game. */
+static int dist(position a, position b)
+{
+    int dx = abs(X(a) - X(b)), dy = abs(Y(a) - Y(b));
+    return dx > dy ? dx : dy;
+}
+
+static void add_line(GString *s, char kind, gunichar glyph, const char *name, colour_t c, int tile)
+{
+    gchar g[8];
+    g[g_unichar_to_utf8(glyph, g)] = 0;
+    uint32_t rgb = wc_rgb((int)c);
+    g_string_append_printf(s, "%c%s%s\t#%06x\t%d\n", kind, g, name, (unsigned)rgb, tile);
+}
+
+void tiles_visible(player *p)
+{
+    map *m = game_map(nlarn, Z(p->pos));
+    position pos = pos_invalid;
+    Z(pos) = Z(p->pos);
+    GString *s = g_string_new(NULL);
+    GPtrArray *mons = g_ptr_array_new();
+    if (!player_effect(p, ET_BLINDNESS))
+        for (Y(pos) = 0; Y(pos) < MAP_MAX_Y; Y(pos)++)
+            for (X(pos) = 0; X(pos) < MAP_MAX_X; X(pos)++)
+            {
+                monster *mo = map_get_monster_at(m, pos);
+                if (mo && (game_fullvis(nlarn) || player_effect(p, ET_DETECT_MONSTER)
+                            || monster_in_sight(mo)))
+                    g_ptr_array_add(mons, mo);
+            }
+    /* nearest first (few monsters: insertion sort) */
+    for (guint i = 1; i < mons->len; i++)
+        for (guint j = i; j > 0 && dist(monster_pos(g_ptr_array_index(mons, j)), p->pos)
+                < dist(monster_pos(g_ptr_array_index(mons, j - 1)), p->pos); j--)
+        {
+            gpointer t = mons->pdata[j]; mons->pdata[j] = mons->pdata[j - 1]; mons->pdata[j - 1] = t;
+        }
+    for (guint i = 0; i < mons->len && s->len < 6000; i++)
+    {
+        monster *mo = g_ptr_array_index(mons, i);
+        if (monster_unknown(mo)) continue;   /* a mimic passes for an item */
+        add_line(s, 'M', monster_glyph(mo), monster_get_name(mo), monster_color(mo), monster_tile(mo));
+    }
+    g_ptr_array_free(mons, TRUE);
+
+    for (Y(pos) = 0; Y(pos) < MAP_MAX_Y; Y(pos)++)
+        for (X(pos) = 0; X(pos) < MAP_MAX_X; X(pos)++)
+        {
+            if (!(game_fullvis(nlarn) || fov_get(p->fv, pos))) continue;
+            inventory **inv = map_ilist_at(m, pos);
+            for (guint i = 0; i < inv_length(*inv) && s->len < 6000; i++)
+            {
+                item *it = inv_get(*inv, i);
+                gchar *d = item_describe_gc(it, player_item_known(p, it), false, false, GC_NOM);
+                add_line(s, 'I', item_glyph(it->type), d, item_colour(it), tiles_item(it));
+                g_free(d);
+            }
+        }
+    be_vis(s->str);
+    g_string_free(s, TRUE);
 }

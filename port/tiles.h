@@ -8,4 +8,5 @@ struct item;
 
 void tiles_paint(struct player *p);   /* end of display_paint_screen() */
 int tiles_item(struct item *it);
+void tiles_visible(struct player *p);   /* Visible window (be_vis) */
 #endif

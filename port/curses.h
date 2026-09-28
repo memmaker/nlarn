@@ -206,6 +206,12 @@ int set_escdelay(int ms);
 /* RVIP: tile for a stdscr cell (-1 none), valid while the cell keeps the
  * character and attributes it has now (port/tiles.c) */
 void wc_settile(int y, int x, int tile);
+/* RVIP W4: a window (not a panel) that is a whole pane of its own (be.h
+ * P_MSG, P_INV); sent on doupdate() when changed, trimmed to its used
+ * extent. wc_rowtile: that row's icon tile (-1 none). */
+void wc_pane(WINDOW *w, int pane);
+void wc_rowtile(WINDOW *w, int y, int tile);
+uint32_t wc_rgb(int colour);   /* palette colour -> 0xRRGGBB */
 
 #define getmaxx(w) ((w) ? (w)->maxx : ERR)
 #define getmaxy(w) ((w) ? (w)->maxy : ERR)

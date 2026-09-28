@@ -56,6 +56,9 @@
 #include "sobjects.h"
 #include "traps.h"
 #include "extdefs.h"
+#ifdef __EMSCRIPTEN__
+#include "be.h"   /* RVIP web port: web_at_cmd, web_sync_files, be_end */
+#endif
 
 /* see https://stackoverflow.com/q/36764885/1519878 */
 #define _STR(x) #x
@@ -587,7 +590,13 @@ static void mainloop()
         else
         {
             /* not running or travelling, get a key and handle it */
+#ifdef __EMSCRIPTEN__
+            web_at_cmd = 1;   /* RVIP: autosave + prompt line (port/be_web.c) */
             ch = display_getch(NULL);
+            web_at_cmd = 0;
+#else
+            ch = display_getch(NULL);
+#endif
 
             /* RVIP 3b: Enter opens the command menu; the chosen command
                runs as if its key had been pressed */
@@ -1454,6 +1463,9 @@ int main(int argc, char *argv[])
        the cause of death from player_die().
     */
     const player_cod cod = setjmp(nlarn_death_jump);
+#ifdef __EMSCRIPTEN__
+    if (cod) web_sync_files();   /* web port: scores, deleted save */
+#endif
 
     /* clear the screen to wipe remains from the previous game */
     clear();
@@ -1509,8 +1521,8 @@ int main(int argc, char *argv[])
 
 #ifdef __EMSCRIPTEN__
     /* web port: persist the configuration (port/be_web.c) */
-    extern void web_sync_files(void);
     web_sync_files();
+    be_end();   /* the page offers a new game */
 #endif
 
     return EXIT_SUCCESS;

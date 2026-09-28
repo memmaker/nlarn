@@ -3,8 +3,93 @@
 ## RVIP progress
 
 **Stage 1 (get + build): done.** **Stage 2 (explore + stairs): done.**
-**Stage 3 (Enter menu + inventory): done.** **Stage 4 (tiles): done.** Next: stage 5
-(windows / pane routing).
+**Stage 3 (Enter menu + inventory): done.** **Stage 4 (tiles): done.**
+**Stage 5 (web page, windows, finetuning): done.** Next: stage 6 (docs + sound).
+
+**Deploy (on the Mac, nothing was deployed from the cloud):**
+```
+cd ~/Games/nlarn && git pull && sh web/build.sh && sh web/deploy.sh
+curl -sI https://ruzzoli.de/roguelikes/nlarn/ | head -1          # 200
+curl -s https://ruzzoli.de/roguelikes/nlarn/ | diff - web/dist/index.html && echo same
+curl -sI https://ruzzoli.de/roguelikes/nlarn/nlarn-core.wasm | grep -i content-type   # application/wasm
+```
+(`deploy.sh` refuses to run from an unclean or unpushed tree. The page loads
+`../rvip-wm.js`, `../rvip-app.js` and `../fonts/`: run `roguelikes-index/deploy.sh`
+too if rvip-tools changed since its last deploy.)
+
+Stage 5 facts:
+- **Web page files:** `web/index.html` (top bar `Help · File ▾ | Windows ▾ · Tiles ·
+  Font · Audio ▾` + key hints `X` explore · `i` inventory · `Enter` command menu ·
+  `?` help; windows `#t-map`, `#t-msg`, `#t-stat`, `#t-inv`, `#t-vis`, pop-up `#pop`,
+  help panel), `web/nlarn.js` (draws the panes, input, WM,
+  RvipApp), `web/make-help.py` (cloud variant, self-contained: key list parsed from
+  `lib/nlarn.hlp`, version from `inc/nlarn.h`; uses the Mac Docs entry `nlarn.html`
+  if one exists), `web/deploy.sh` (guard line from roguelikes-index), `web/build.sh`
+  (also writes `fonts.json` from `~/Games/roguelikes-index/fonts` and `help.html`).
+  Loads `../rvip-wm.js`, `../rvip-app.js` (no copies in the repo).
+- **Pane ids** (`port/be.h`): `P_MAP` 0 (67x17), `P_STATUS` 1 (46x23, trimmed),
+  `P_MSG` 2 (90x200 history), `P_INV` 3 (64x120), `P_POP` 4 (bounding box of the
+  shown panels). Visible is a string (`be_vis`), not a grid.
+- **Routing** (`port/wcurses.c` `doupdate()`): stdscr cells go through `route()` by
+  region: rows 0-16 x cols 0-66 -> `P_MAP` (with the tile ids from `tiles_paint()`);
+  the right column (cols 68..) -> `P_STATUS` rows 6..; the two lines under the map
+  are cut in their three segments (name/level at col 0, HP MP/XP at col 46, T/Lvl at
+  col 68) -> `P_STATUS` rows 0-5; the border and stdscr's message rows (20..) are not
+  sent. Windows registered with `wc_pane(win, pane)` (not panels) are panes of their
+  own: `display_web_panes()` in `src/display.c` (`#ifdef __EMSCRIPTEN__`, end of
+  `display_paint_screen()`) draws the **Messages** history (log entries oldest first,
+  newest at the bottom, same colours/tags as the screen, 200 rows) and the
+  **Inventory** (sorted and grouped like the `i` list, letters a.., colour =
+  `item_colour()`, equipped bold with ` *`, icon per row with `wc_rowtile()` =
+  `tiles_item()`; text mode `a) ! name`). Every visible **panel** is composed into
+  `P_POP` (its screen origin goes to the page for mouse clicks). All text panes are
+  trimmed by the shim (`be_extent`, used cols/rows). The cursor goes to `P_POP` (text
+  entry) or `P_MAP` (targeting), never drawn on the hero. **Visible**: `tiles_visible()`
+  (`port/tiles.c`): monsters the map shows (nearest first) + every item in view, with
+  glyph, name, game colour (`wc_rgb()`), tile. `be_hero(y, x, level)` from
+  `tiles_paint()` -> `RvipWM.center`. Prompt line: `be_prompt()` = this turn's log
+  text (tags stripped) -> `RvipWM.prompt.text`; `web_at_cmd` (set in `mainloop()`
+  around the command read) -> `RvipWM.prompt.wait`.
+- **Saves:** IDBFS at `RvipApp.dir` (`/nlarn`), `-D /nlarn`; `nlarn.sav`, `nlarn.ini`,
+  scores, `web-layout.json` (layout, WM sizes/titles, fonts, audio switches).
+  **Autosave**: JS sets a flag (2 min, tab hidden, Export); `be_getkey()` runs
+  `game_save()` only while `web_at_cmd`, with `web_autosaving` set so `game_save()`
+  skips its "Saving...." pop-up (screen untouched: tested by counting lit map pixels
+  and the save's mtime). Export/Import/New game via RvipApp.
+- **Game end:** death and `^Q` -> NLarn's own flow (The End screen, scores, memorial
+  question, back to its main menu = new game). `^S` (save and exit) and `q`/Esc in the
+  main menu return from `main()` -> `be_end()` -> the page syncs IndexedDB and reloads
+  by itself (no dead page, no overlay); with a save the main menu offers "Continue
+  saved Game". A death also syncs IDBFS right after the `setjmp` return. Player
+  name: NLarn asks itself (kept).
+- **Layout:** multi = map | Status / Inventory / Visible, Messages under the map; one
+  window = Messages on top, map with the Status column on its right. The map's cell
+  height fits the whole map into the Map window unless A−/A+ on its title bar chose a
+  zoom (kept per window mode, `L.mt`); `web-layout.json` holds splits, WM state, zoom,
+  fonts, audio.
+- **Tested headless** (Chromium, 1440x900, persistent profile): new game, all
+  windows filled (status, messages, inventory with icons, visible with icons),
+  inventory/menus/questions in the pop-up, Enter menu, `X` explore in town and D1,
+  `>` stairs, map zoom (A+ on the Map title bar; zoomed map keeps the hero centred /
+  clamped), text A+, autosave, `^S` -> page reloads -> Continue -> same turn,
+  `^Q` -> The End -> main menu -> `q` -> page reloads into a new game, layout (split
+  drag, A+, map zoom) survives reload, shop (DND store via map click travel), Help, Tiles None, Windows menu
+  (one window / multi), font chooser, resize 1000x650 -> 1440x900 -> 1200x750 (with a
+  question open) -> 760x500, `^P` `^A` `^R` `?` windows. No console errors.
+- **Finetuning done:** inventory icons (cols 2-4, 1:2 aspect, clipped) and
+  `a) ! name` in text mode; visible icons; tile switch redraws both (^L at the
+  prompt); messages fill from the top and follow the end; Tiles Amiga -> None
+  (late onload guarded); autosave doesn't touch the screen; pop-ups via
+  `RvipWM.popup`; no cursor on the hero; zoom on the Map title bar; A−/A+ owned by
+  the WM (`zoom:` only for map and the canvas text panes; pop-up follows Messages);
+  `../rvip-app.js` (`RvipApp.dir`/`mount`); both font choosers (`L.face`,
+  `L.mapFace` on the Map title bar, text mode only); crash check (no signature
+  mismatch warnings in the build); movement (explore paints each step, `<`/`>` only
+  walk, Enter menu has no moves: stages 2/3); top bar order + key hints; Audio ▾
+  checkboxes stored, off by default (sounds: stage 6, use the sound table then).
+  **Not applicable:** DawnLike floors/animation (Amiga set only, like larn/ularn),
+  the game's own `i` pop-up keeps NLarn's UI colours (NLarn has its own themed
+  pop-up windows; the pane carries the item colours).
 
 Stage 4 facts:
 - **Tile set: larn.org's Amiga Larn tiles** (github.com/primeau/Larn `src/img`, MIT,
@@ -181,7 +266,6 @@ Stage 2 facts:
   v1.3.2 https://github.com/madler/zlib` plus a `.emscripten_url` file holding the
   archive URL; on the Mac `-sUSE_ZLIB=1` just downloads.
 
-Open problems: Game end (main returns) leaves a dead page; no pane routing,
-help button or rvip-wm layout yet (stage 5; the Tiles button sits in a plain
-top bar; credit the Amiga tiles (MIT, Jason Primeau) on the Help page then); translations not shipped
-(English only, `g_get_language_names()` = "C").
+Open problems: translations not shipped (English only, `g_get_language_names()` =
+"C"). NLarn's own pop-up windows are sized for the 90x25 screen (the command menu
+scrolls); the layout check on the Mac in a real browser is still to do (W10).

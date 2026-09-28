@@ -2,7 +2,7 @@
 # Build NLarn for the browser (Emscripten + Asyncify) into web/dist.
 # GLib: port/glib (a small GLib subset on libc), curses: port/curses.h +
 # port/wcurses.c (in-memory curses with panels), frontend: port/be_web.c.
-# Run with sh. ASAN=1 sh web/build.sh builds an AddressSanitizer variant.
+# Deploy with web/deploy.sh. Run with sh. ASAN=1 sh web/build.sh builds an AddressSanitizer variant.
 set -e
 cd "$(dirname "$0")/.."
 command -v emcc >/dev/null 2>&1 || PATH="${EMSDK:-/home/user/emsdk}/upstream/emscripten:$PATH"
@@ -37,4 +37,9 @@ emcc $FLAGS -std=gnu99 -Iport -Iport/glib -Iinc -Iinc/external \
 	-sFORCE_FILESYSTEM -lidbfs.js -sENVIRONMENT=web \
 	--preload-file "$STAGE/lib@/nlarn-data/lib"
 cp web/index.html web/nlarn.js web/tiles.png "$OUT/"
+# text fonts: the index page's fonts/ (loaded from ../fonts/ on the server)
+FONTS="$HOME/Games/roguelikes-index/fonts"
+[ -d "$FONTS" ] || FONTS=/home/user/roguelikes/fonts
+(cd "$FONTS" 2>/dev/null && ls *.woff | sed "s/\.woff$//") | python3 -c "import json,sys; print(json.dumps(sys.stdin.read().split()))" > "$OUT/fonts.json"
+python3 web/make-help.py > "$OUT/help.html"
 ls -la "$OUT"
