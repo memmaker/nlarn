@@ -2726,7 +2726,18 @@ char **player_effect_text(player *p)
     return text;
 }
 
+/* RVIP 3c: the equipment list shows the equipped items */
+static int player_inv_filter_equipped(item *it)
+{
+    return player_item_is_equipped(nlarn->p, it);
+}
+
 int player_inv_display(player *p)
+{
+    return player_inv_display_list(p, false);
+}
+
+int player_inv_display_list(player *p, bool equipment)
 {
     g_assert(p != NULL);
 
@@ -2734,6 +2745,12 @@ int player_inv_display(player *p)
     {
         /* don't show empty inventory */
         log_add_entry(nlarn->log, _("You do not carry anything."));
+        return false;
+    }
+
+    if (equipment && inv_length_filtered(p->inventory, player_inv_filter_equipped) == 0)
+    {
+        log_add_entry(nlarn->log, _("You have nothing equipped."));
         return false;
     }
 
@@ -2755,6 +2772,7 @@ int player_inv_display(player *p)
     callback->key = 'e';
     callback->function = &player_item_equip;
     callback->checkfun = &player_item_is_equippable;
+    callback->primary = true;
     g_ptr_array_add(callbacks, callback);
 
     callback = g_malloc0(sizeof(display_inv_callback));
@@ -2763,6 +2781,7 @@ int player_inv_display(player *p)
     callback->key = 'o';
     callback->function = &container_open;
     callback->checkfun = &player_item_is_container;
+    callback->primary = true;
     g_ptr_array_add(callbacks, callback);
 
     callback = g_malloc0(sizeof(display_inv_callback));
@@ -2779,6 +2798,7 @@ int player_inv_display(player *p)
     callback->key = 'u';
     callback->function = &player_item_unequip_wrapper;
     callback->checkfun = &player_item_is_unequippable;
+    callback->primary = true;
     g_ptr_array_add(callbacks, callback);
 
     /* unequip and use should never appear together */
@@ -2788,6 +2808,7 @@ int player_inv_display(player *p)
     callback->key = 'u';
     callback->function = &player_item_use;
     callback->checkfun = &player_item_is_usable;
+    callback->primary = true;
     g_ptr_array_add(callbacks, callback);
 
     callback = g_malloc0(sizeof(display_inv_callback));
@@ -2797,9 +2818,33 @@ int player_inv_display(player *p)
     callback->function = &player_item_notes;
     g_ptr_array_add(callbacks, callback);
 
-    /* display inventory */
-    display_inventory(_("Inventory"), p, &p->inventory, callbacks, false,
-                      true, false, NULL);
+    /* display the inventory or the equipment list; 4/6 switch between
+       them, other keys the list does not use close it and run as
+       commands (display_inv_main) */
+    for (;;)
+    {
+        display_inv_main = true;
+        display_inv_switch = 0;
+
+        if (equipment)
+            display_inventory(_("Equipment"), p, &p->inventory, callbacks, false,
+                              true, false, player_inv_filter_equipped);
+        else
+            display_inventory(_("Inventory"), p, &p->inventory, callbacks, false,
+                              true, false, NULL);
+
+        display_inv_main = false;
+
+        if (!display_inv_switch || inv_length(p->inventory) == 0)
+            break;
+
+        equipment = !equipment;
+        if (equipment && inv_length_filtered(p->inventory, player_inv_filter_equipped) == 0)
+        {
+            log_add_entry(nlarn->log, _("You have nothing equipped."));
+            equipment = false;
+        }
+    }
 
     /* clean up */
     display_inv_callbacks_clean(callbacks);

@@ -48,6 +48,7 @@ static position step_from;
 static bool step_door;              /* the step opens a closed door */
 static message_log_entry *log_last; /* newest log entry before the step */
 static gchar *log_pending;          /* unflushed text from before the step */
+static GPtrArray *quiet;            /* what peaceful monsters said during the step */
 
 void explore_reset(void)
 {
@@ -346,27 +347,61 @@ int explore_step(player *p)
     step_door = (map_sobject_at(game_map(nlarn, Z(next)), next) == LS_CLOSEDDOOR);
     g_free(log_pending);
     log_pending = g_strdup(nlarn->log->buffer->str);
+    if (quiet != NULL)
+    {
+        g_ptr_array_free(quiet, true);
+        quiet = NULL;
+    }
     log_last = log_length(nlarn->log)
         ? log_get_entry(nlarn->log, log_length(nlarn->log) - 1) : NULL;
 
     return player_move(p, pos_dir(p->pos, next), true);
 }
 
-/* messages the walker causes itself and that need no attention */
+void explore_monster_logged(monster *m, gsize from)
+{
+    if (!mode || !stepped || from >= nlarn->log->buffer->len)
+        return;
+
+    /* only peaceful monsters' doings are harmless: townspeople and
+       servants (MA_CIVILIAN, MA_SERVE) */
+    if (!monster_is_friendly(m))
+        return;
+
+    if (quiet == NULL)
+        quiet = g_ptr_array_new_with_free_func(g_free);
+
+    const char *said = nlarn->log->buffer->str + from;
+    while (*said == ' ')
+        said++;
+    if (*said)
+        g_ptr_array_add(quiet, g_strdup(said));
+}
+
+/* strip every occurrence of cut from s */
+static void strip_all(gchar *s, const char *cut)
+{
+    gchar *hit;
+    size_t len = strlen(cut);
+    if (len == 0)
+        return;
+    while ((hit = strstr(s, cut)) != NULL)
+        memmove(hit, hit + len, strlen(hit + len) + 1);
+}
+
+/* messages the walker causes itself, or peaceful monsters' talk: they
+   need no attention */
 static bool benign(const char *msg)
 {
     gchar *s = g_strdup(msg);
+    for (guint i = 0; quiet != NULL && i < quiet->len; i++)
+        strip_all(s, g_ptr_array_index(quiet, i));
     gchar *see_door = g_strdup_printf(_("You see %s here."),
             noun_phrase(so_get_desc_raw(LS_OPENDOOR), ART_NONE, GC_ACC, false, false));
     const char *drop[] = { _("You open the door."), see_door };
 
     for (size_t i = 0; i < G_N_ELEMENTS(drop); i++)
-    {
-        gchar *hit;
-        size_t len = strlen(drop[i]);
-        while ((hit = strstr(s, drop[i])) != NULL)
-            memmove(hit, hit + len, strlen(hit + len) + 1);
-    }
+        strip_all(s, drop[i]);
 
     bool empty = (*g_strstrip(s) == '\0');
     g_free(see_door);

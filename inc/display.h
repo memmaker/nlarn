@@ -54,7 +54,16 @@ typedef struct display_inv_callback
     display_inv_callback_func function;
     int (*checkfun)(player *, inventory **, item *);
     bool active;
+    bool primary;           /* the item's main action (letter key) */
 } display_inv_callback;
+
+/* one row of display_key_menu(): key 0 = a group heading */
+typedef struct display_menu_item
+{
+    int key;                /* the key that chooses the row */
+    const char *label;      /* the key as shown */
+    const char *text;       /* the description */
+} display_menu_item;
 
 typedef struct display_window
 {
@@ -147,6 +156,23 @@ item *display_inventory(const char *title, player *p, inventory **inv,
                         int (*filter)(item *));
 
 void display_inv_callbacks_clean(GPtrArray *callbacks);
+
+/* set by the player's inventory / equipment list (player_inv_display()):
+   4/6 switch lists (display_inv_switch is set when the list closed for
+   that), and keys the list does not use close it and run as commands */
+extern bool display_inv_main;
+extern int display_inv_switch;
+
+/**
+ * A floating list sized to its content: key column + description, group
+ * headings (key 0), cursor, scrolling. Arrows / 8 / 2 / wheel move,
+ * Enter / Space / 5 / 6 / click choose, a row's key chooses that row,
+ * Escape / 4 / 0 cancel.
+ *
+ * @return the index of the chosen row, or -1
+ */
+int display_key_menu(const char *title, const display_menu_item *items,
+                     guint n_items, guint initial);
 
 void display_config_autopickup(bool settings[IT_MAX]);
 

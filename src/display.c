@@ -96,6 +96,10 @@ static void display_spheres_paint(sphere *s, player *p);
 
 const int DISPLAY_WINDOW_MAX_WIDTH = 78;
 
+/* RVIP: the player's inventory / equipment list is open (see display.h) */
+bool display_inv_main = false;
+int display_inv_switch = 0;
+
 void display_init()
 {
 #ifdef NCURSES_VERSION
@@ -1275,6 +1279,199 @@ static int caption_hotkey(const char *s)
     return k ? (int)g_utf8_get_char(k + 5) : 0;
 }
 
+/* RVIP 3c: item actions of the inventory lists */
+
+/* is the callback offered for this item? */
+static bool inv_cb_fits(display_inv_callback *cb, player *p, item *it)
+{
+    return cb->checkfun == NULL || cb->checkfun(p, cb->inv, it);
+}
+
+/* the item's main action: the first fitting callback marked primary;
+   in other lists (shops, floor, containers) the first fitting one;
+   NULL = examine */
+static display_inv_callback *inv_primary(GPtrArray *callbacks, player *p, item *it,
+                                          bool main_list)
+{
+    for (guint i = 0; callbacks != NULL && i < callbacks->len; i++)
+    {
+        display_inv_callback *cb = g_ptr_array_index(callbacks, i);
+        if (cb->primary && inv_cb_fits(cb, p, it))
+            return cb;
+    }
+
+    if (main_list)
+        return NULL;
+
+    for (guint i = 0; callbacks != NULL && i < callbacks->len; i++)
+    {
+        display_inv_callback *cb = g_ptr_array_index(callbacks, i);
+        if (inv_cb_fits(cb, p, it))
+            return cb;
+    }
+
+    return NULL;
+}
+
+/* the drop action of the player's inventory, when it fits */
+static display_inv_callback *inv_drop(GPtrArray *callbacks, player *p, item *it,
+                                       bool main_list)
+{
+    for (guint i = 0; main_list && callbacks != NULL && i < callbacks->len; i++)
+    {
+        display_inv_callback *cb = g_ptr_array_index(callbacks, i);
+        if (cb->key == 'd' && inv_cb_fits(cb, p, it))
+            return cb;
+    }
+    return NULL;
+}
+
+/* "An uncursed dagger +0" */
+static gchar *inv_item_title(item *it, bool known)
+{
+    gchar *desc = item_describe_gc(it, known, false, false, GC_NOM);
+    if (*desc)
+    {
+        gunichar c = g_unichar_toupper(g_utf8_get_char(desc));
+        char buf[8] = { 0 };
+        g_unichar_to_utf8(c, buf);
+        gchar *t = g_strconcat(buf, g_utf8_next_char(desc), NULL);
+        g_free(desc);
+        desc = t;
+    }
+    return desc;
+}
+
+/* show the item's details in a window of their own */
+static void inv_examine(player *p, item *it, bool shop)
+{
+    const bool known = shop | player_item_known(p, it);
+    char *details = item_detailed_description(it, known, shop);
+    gchar *desc = inv_item_title(it, known);
+    gchar *msg = g_strdup_printf("`EMPH`%s`end`\n\n%s", desc, details);
+
+    display_show_message(_("Item details"), msg, 0);
+
+    g_free(desc);
+    g_free(details);
+    g_free(msg);
+}
+
+/* the item menu: every fitting action with its key, plus examine (x);
+   returns the chosen callback, or NULL (examine is run here) */
+static display_inv_callback *inv_item_menu(GPtrArray *callbacks, player *p,
+                                           item *it, bool shop, bool main_list)
+{
+    guint n = 0;
+    display_menu_item *rows = g_new0(display_menu_item, (callbacks ? callbacks->len : 0) + 1);
+    display_inv_callback **cbs = g_new0(display_inv_callback *, (callbacks ? callbacks->len : 0) + 1);
+    display_inv_callback *main_cb = inv_primary(callbacks, p, it, main_list);
+    guint initial = 0;
+
+    for (guint i = 0; callbacks != NULL && i < callbacks->len; i++)
+    {
+        display_inv_callback *cb = g_ptr_array_index(callbacks, i);
+        if (!inv_cb_fits(cb, p, it))
+            continue;
+
+        /* "(`KEY`d`end`)rop" -> "drop" */
+        char *plain = str_strip(cb->description);
+        GString *txt = g_string_new(NULL);
+        for (const char *c = plain; *c; c++)
+            if (*c != '(' && *c != ')')
+                g_string_append_c(txt, *c);
+        g_free(plain);
+
+        char kbuf[8] = { 0 };
+        g_unichar_to_utf8((gunichar)cb->key, kbuf);
+
+        if (cb == main_cb)
+            initial = n;
+        rows[n].key = cb->key;
+        rows[n].label = g_strdup(kbuf);
+        rows[n].text = g_string_free(txt, false);
+        cbs[n++] = cb;
+    }
+
+    rows[n].key = 'x';
+    rows[n].label = g_strdup("x");
+    rows[n].text = g_strdup(_("examine"));
+    if (main_cb == NULL)
+        initial = n;
+    n++;
+
+    gchar *title = inv_item_title(it, shop | player_item_known(p, it));
+    int sel = display_key_menu(title, rows, n, initial);
+    g_free(title);
+
+    display_inv_callback *ret = NULL;
+    if (sel == (int)n - 1)
+        inv_examine(p, it, shop);
+    else if (sel >= 0)
+        ret = cbs[sel];
+
+    for (guint i = 0; i < n; i++)
+    {
+        g_free((char *)rows[i].label);
+        g_free((char *)rows[i].text);
+    }
+    g_free(rows);
+    g_free(cbs);
+
+    return ret;
+}
+
+/* after an item action: the list stays open unless a monster is in view */
+static bool inv_monster_in_view(player *p)
+{
+    GList *threats = player_visible_threats(p, false);
+    bool seen = (threats != NULL);
+    g_list_free(threats);
+    return seen;
+}
+
+/* the width an inventory list needs: letter + longest item + marker or
+   price, the title and the caption, capped by the screen */
+static guint inv_content_width(const char *title, player *p, inventory **inv,
+                               int (*ifilter)(item *), guint len,
+                               bool show_price, bool show_weight,
+                               bool show_account, bool has_callbacks)
+{
+    guint w = 0;
+    for (guint i = 0; i < len; i++)
+    {
+        item *it = inv_get_filtered(*inv, i, ifilter);
+        gchar *desc = item_describe_gc(it, show_price || player_item_known(p, it),
+                false, false, GC_NOM);
+        w = max(w, (guint)g_utf8_strlen(desc, -1));
+        g_free(desc);
+
+        /* category headers " Potions " at column 4 */
+        gchar *cat = g_strdup(item_name_pl(it->type));
+        w = max(w, (guint)g_utf8_strlen(cat, -1) + 3);
+        g_free(cat);
+    }
+
+    /* border + " a) " + text + " * " / " 12345 gold " + border */
+    w += 2 + 4 + (show_price ? 12 : 3);
+
+    gchar *t;
+    if (show_account)
+        t = g_strdup_printf(_("%s - %d gold on bank account"), title, p->bank_account);
+    else if (show_weight)
+        t = g_strdup_printf(_("%s - %s of %s carried"), title,
+                            player_inv_weight(p), player_can_carry(p));
+    else
+        t = g_strdup(title);
+    w = max(w, (guint)g_utf8_strlen(t, -1) + 10);
+    g_free(t);
+
+    if (has_callbacks)
+        w = max(w, caption_visible_len(_("(`KEY`Enter`end`) actions (`KEY`?`end`) help")) + 8);
+
+    return min(w, (guint)COLS - 4);
+}
+
 item *display_inventory(const char *title, player *p, inventory **inv,
                         GPtrArray *callbacks, bool show_price,
                         bool show_weight, bool show_account,
@@ -1285,9 +1482,17 @@ item *display_inventory(const char *title, player *p, inventory **inv,
     /* the item description pop-up */
     display_window *ipop = NULL;
 
-    /* the dialogue width and starting position */
-    const guint width = min(COLS - 4, DISPLAY_WINDOW_MAX_WIDTH);
-    const int startx = (COLS - width) / 2;
+    /* the dialogue width (sized to the content) and starting position */
+    guint width = 0;
+    int startx = 0;
+
+    /* the player's own list (see display.h); lists opened from its
+       actions (e.g. a container) are not */
+    const bool main_list = display_inv_main;
+    display_inv_main = false;
+
+    /* closed with 0 or . (item prompts return nothing then) */
+    bool cancelled = false;
 
     guint len_curr;
     bool redraw = false;
@@ -1379,6 +1584,10 @@ item *display_inventory(const char *title, player *p, inventory **inv,
 
         if (!iwin)
         {
+            width = inv_content_width(title, p, inv, ifilter, len_curr,
+                                      show_price, show_weight, show_account,
+                                      callbacks != NULL);
+            startx = (COLS - width) / 2;
             iwin = display_window_new(startx, 2, width, height, title);
             if (callbacks != NULL)
             {
@@ -1459,6 +1668,10 @@ item *display_inventory(const char *title, player *p, inventory **inv,
             /* remember which item this row shows, for mouse selection */
             row_curr[line] = line - shown_headers;
 
+            /* the row's letter (page-relative: a = first item shown) */
+            const guint ord = line - shown_headers;
+            const char letter = (ord <= 26) ? (char)('a' + ord - 1) : ' ';
+
             bool item_equipped = false;
 
             if (!show_price)
@@ -1484,8 +1697,9 @@ item *display_inventory(const char *title, player *p, inventory **inv,
             {
                 /* inside shop */
                 gchar *item_desc = item_describe_gc(it, true, false, false, GC_NOM);
-                mvwaprintw(iwin->window, line, 1, attrs, _(" %-*s %5d gold "),
-                          utf8_pad(item_desc, width - 15), item_desc,
+                mvwaprintw(iwin->window, line, 1, attrs, _(" %c%c %-*s %5d gold "),
+                          letter, letter == ' ' ? ' ' : ')',
+                          utf8_pad(item_desc, width - 18), item_desc,
                           item_price(it));
 
                 g_free(item_desc);
@@ -1494,8 +1708,9 @@ item *display_inventory(const char *title, player *p, inventory **inv,
             {
                 gchar *item_desc = item_describe_gc(it, player_item_known(p, it),
                         false, false, GC_NOM);
-                mvwaprintw(iwin->window, line, 1, attrs, " %-*s %c ",
-                          utf8_pad(item_desc, width - 6), item_desc,
+                mvwaprintw(iwin->window, line, 1, attrs, " %c%c %-*s %c ",
+                          letter, letter == ' ' ? ' ' : ')',
+                          utf8_pad(item_desc, width - 9), item_desc,
                           player_item_is_equipped(p, it) ? '*' : ' ');
 
                 g_free(item_desc);
@@ -1540,6 +1755,8 @@ item *display_inventory(const char *title, player *p, inventory **inv,
            each segment's span can be hit-tested by mouse. */
         guint cap_x = 4;
         guint help_col = 0, help_len = 0;
+        guint acts_col = 0, acts_len = 0;
+        (void)cap_x;
 
         /* assemble window caption (if callbacks have been defined) */
         for (guint cb_nr = 0; callbacks != NULL && cb_nr < callbacks->len; cb_nr++)
@@ -1574,19 +1791,21 @@ item *display_inventory(const char *title, player *p, inventory **inv,
         ipop = display_item_details(iwin->x1, iwin->y1 + iwin->height,
                                     iwin->width, it, p, show_price);
 
-        if (g_strv_length(captions) > 0)
+        if (callbacks != NULL)
         {
-            /* append "(?) help" to trigger the help pop-up */
+            /* RVIP 3c: letters run the items' main actions, so the
+               action keys live in the item menu (Enter); the caption
+               only points there. Clicking "actions" opens the menu. */
+            const char *acts = _("(`KEY`Enter`end`) actions");
             const char *help = _("(`KEY`?`end`) help");
 
-            /* record its span, too, so it can be clicked */
-            help_col = cap_x;
+            acts_col = 4;
+            acts_len = caption_visible_len(acts);
+            help_col = acts_col + acts_len + 1;
             help_len = caption_visible_len(help);
 
-            strv_append(&captions, help);
-
-            /* update the window's caption with the assembled array of captions */
-            display_window_update_caption(iwin, g_strjoinv(" ", captions));
+            gchar *cap = g_strconcat(acts, " ", help, NULL);
+            display_window_update_caption(iwin, cap);
         }
         else
         {
@@ -1601,9 +1820,121 @@ item *display_inventory(const char *title, player *p, inventory **inv,
 
         wrefresh(iwin->window);
 
-        switch (key = display_scroll_getch(iwin, &autoscroll))
+        key = display_scroll_getch(iwin, &autoscroll);
+
+        /* RVIP 3c: what the key does to an item: the row ordinal it
+           names (letters, Shift+letters, Ctrl+letters) or the selected
+           row (numpad + - *, Enter), and the action */
+        enum { IA_NONE, IA_MAIN, IA_DROP, IA_EXAMINE, IA_MENU } ia = IA_NONE;
+        guint ia_ord = 0;
+
+        if (key >= 'a' && key <= 'z')
+        {
+            ia = IA_MAIN;
+            ia_ord = key - 'a' + 1;
+        }
+        else if (key >= 'A' && key <= 'Z' && main_list)
+        {
+            ia = IA_DROP;
+            ia_ord = key - 'A' + 1;
+        }
+        else if (key >= 1 && key <= 26 && key != KEY_TAB
+                 && key != KEY_LF && key != KEY_CR)
+        {
+            ia = IA_EXAMINE;
+            ia_ord = key;
+        }
+        else if (callbacks != NULL && (key == '+' || key == '-' || key == '*'))
+        {
+            ia = (key == '+') ? IA_MAIN : (key == '-') ? IA_DROP : IA_EXAMINE;
+            ia_ord = s.curr;
+        }
+        else if (key == KEY_LF || key == KEY_CR || key == KEY_ENTER
+#ifdef PADENTER
+                 || key == PADENTER
+#endif
+                 || key == KEY_SPC || key == '5')
+        {
+            ia = (callbacks != NULL) ? IA_MENU : IA_MAIN;
+            ia_ord = s.curr;
+        }
+        else if (key == KEY_MOUSE
+                 && (display_mouse_event.bstate & (BUTTON1_PRESSED | BUTTON1_CLICKED)))
+        {
+            /* a click on an item row: choose it (prompts) or open its
+               menu (lists with actions) */
+            const int row = display_mouse_event.y - (int)iwin->y1;
+            const int col = display_mouse_event.x - (int)iwin->x1;
+
+            if (row >= 1 && row <= (int)s.maxvis
+                    && col >= 1 && col < (int)iwin->width - 1
+                    && row_curr[row] > 0)
+            {
+                ia = (callbacks != NULL) ? IA_MENU : IA_MAIN;
+                ia_ord = row_curr[row];
+            }
+            else if (row == (int)iwin->height - 1 && acts_len > 0
+                     && col >= (int)acts_col && col < (int)(acts_col + acts_len))
+            {
+                ia = IA_MENU;
+                ia_ord = s.curr;
+            }
+        }
+
+        if (ia != IA_NONE && ia_ord >= 1 && ia_ord <= s.max_item_vis
+                && s.offset + ia_ord - 1 < len_curr)
+        {
+            s.curr = ia_ord;
+            item *sel_it = inv_get_filtered(*inv, s.offset + ia_ord - 1, ifilter);
+            display_inv_callback *cb = NULL;
+
+            if (callbacks == NULL)
+            {
+                if (ia == IA_EXAMINE)
+                    inv_examine(p, sel_it, show_price);
+                else
+                    /* prompts: the item is chosen */
+                    keep_running = false;
+            }
+            else
+            {
+                if (ia == IA_MAIN)
+                {
+                    cb = inv_primary(callbacks, p, sel_it, main_list);
+                    if (cb == NULL)
+                        inv_examine(p, sel_it, show_price);
+                }
+                else if (ia == IA_DROP)
+                    cb = inv_drop(callbacks, p, sel_it, main_list);
+                else if (ia == IA_EXAMINE)
+                    inv_examine(p, sel_it, show_price);
+                else
+                    cb = inv_item_menu(callbacks, p, sel_it, show_price, main_list);
+
+                if (cb != NULL)
+                {
+                    cb->function(p, cb->inv, sel_it);
+
+                    /* the list reopens unless a monster is in view */
+                    if (inv_monster_in_view(p))
+                        keep_running = false;
+                }
+                redraw = true;
+            }
+        }
+        else if (ia != IA_NONE)
+        {
+            /* no such row: ignore the key */
+        }
+        else switch (key)
         {
         case KEY_ESC:
+            keep_running = false;
+            break;
+
+        case '0':
+        case '.':
+            cancelled = true;
             keep_running = false;
             break;
 
@@ -1611,86 +1942,36 @@ item *display_inventory(const char *title, player *p, inventory **inv,
             display_inventory_help(callbacks);
             break;
 
-        case KEY_LF:
-        case KEY_CR:
-#ifdef PADENTER
-        case PADENTER:
-#endif
-        case KEY_ENTER:
-            if (callbacks == NULL)
+        case '4':
+        case '6':
+        case KEY_LEFT:
+        case KEY_RIGHT:
+            /* switch between the inventory and the equipment list */
+            if (main_list)
             {
-                /* if no callbacks have been defined, enter selects item */
+                display_inv_switch = 1;
                 keep_running = false;
             }
             break;
 
         case KEY_MOUSE:
-            /* A left click on an item row selects it; clicking the item
-               that is already selected returns it, exactly like pressing
-               Enter does in a single-selection dialog. */
-            if (display_mouse_event.bstate & (BUTTON1_PRESSED | BUTTON1_CLICKED))
+            if ((display_mouse_event.bstate & (BUTTON1_PRESSED | BUTTON1_CLICKED))
+                    && help_len > 0
+                    && display_mouse_event.y - (int)iwin->y1 == (int)iwin->height - 1
+                    && display_mouse_event.x - (int)iwin->x1 >= (int)help_col
+                    && display_mouse_event.x - (int)iwin->x1 < (int)(help_col + help_len))
             {
-                const int row = display_mouse_event.y - (int)iwin->y1;
-                const int col = display_mouse_event.x - (int)iwin->x1;
-
-                if (row >= 1 && row <= (int)s.maxvis
-                        && col >= 1 && col < (int)iwin->width - 1
-                        && row_curr[row] > 0)
-                {
-                    if (callbacks == NULL && s.curr == row_curr[row])
-                    {
-                        /* already selected: return it like Enter */
-                        keep_running = false;
-                        break;
-                    }
-
-                    /* move the selection to the clicked item */
-                    s.curr = row_curr[row];
-                    break;
-                }
-
-                /* A click on an action hotkey in the caption row (the
-                   bottom border) triggers that action, exactly like
-                   pressing the corresponding key. */
-                if (row == (int)iwin->height - 1)
-                {
-                    /* the "(?) help" segment */
-                    if (help_len > 0 && col >= (int)help_col
-                            && col < (int)(help_col + help_len))
-                    {
-                        display_inventory_help(callbacks);
-                        break;
-                    }
-
-                    bool triggered = false;
-                    for (guint i = 0; callbacks != NULL && i < callbacks->len; i++)
-                    {
-                        display_inv_callback *cb = g_ptr_array_index(callbacks, i);
-
-                        if (!cb->active || cap_col[i] == 0
-                                || col < (int)cap_col[i]
-                                || col >= (int)(cap_col[i] + cap_len[i]))
-                            continue;
-
-                        item *sel_it = inv_get_filtered(*inv,
-                                s.curr + s.offset - 1, ifilter);
-                        cb->function(p, cb->inv, sel_it);
-                        redraw = true;
-                        triggered = true;
-                        break;
-                    }
-
-                    if (triggered)
-                        break;
-                }
+                display_inventory_help(callbacks);
+                break;
             }
 
-            /* not on an item row or action: let the window handle the
-               event, so a click on the title bar still drags the window */
+            /* let the window handle the event, so a click on the title
+               bar still drags the window */
             display_window_move(iwin, key);
             break;
 
         default:
+        {
             /* handle window movement (including dragging by mouse) */
             if (display_window_move(iwin, key))
                 break;
@@ -1698,12 +1979,16 @@ item *display_inventory(const char *title, player *p, inventory **inv,
             if (list_handle_scroll_key(&s, key, inv, ifilter, visible_category_headers))
                 break;
 
+            bool handled = false;
+
             /* Check if the key matches an item type glyph
              * and jump to the first item of that type. */
             for (item_t type = IT_NONE + 1; type < IT_MAX; type++)
             {
                 if (item_data[type].glyph != key)
                     continue;
+
+                handled = true;
 
                 /* Find the first item of this type. */
                 guint target = len_curr; /* sentinel: not found */
@@ -1724,8 +2009,8 @@ item *display_inventory(const char *title, player *p, inventory **inv,
                 break;
             }
 
-            /* check callback function keys (if defined) */
-            for (guint cb_nr = 0; callbacks != NULL && cb_nr < callbacks->len; cb_nr++)
+            /* callback keys that are no letters (e.g. ',' pick up) */
+            for (guint cb_nr = 0; !handled && callbacks != NULL && cb_nr < callbacks->len; cb_nr++)
             {
                 display_inv_callback *cb = g_ptr_array_index(callbacks, cb_nr);
 
@@ -1738,11 +2023,25 @@ item *display_inventory(const char *title, player *p, inventory **inv,
                     cb->function(p, cb->inv, sel_it);
 
                     redraw = true;
+                    handled = true;
+
+                    if (inv_monster_in_view(p))
+                        keep_running = false;
 
                     /* don't check other callback functions */
                     break;
                 }
             }
+
+            /* the player's own lists: any other key closes the list and
+               runs as a command */
+            if (!handled && main_list && key != ERR && key != KEY_RESIZE)
+            {
+                ungetch(key);
+                cancelled = true;
+                keep_running = false;
+            }
+        }
         };
 
         len_curr = inv_length_filtered(*inv, ifilter);
@@ -1756,7 +2055,9 @@ item *display_inventory(const char *title, player *p, inventory **inv,
     display_window_destroy(ipop);
     display_window_destroy(iwin);
 
-    if ((callbacks == NULL) && (key != KEY_ESC))
+    display_inv_main = main_list;
+
+    if ((callbacks == NULL) && (key != KEY_ESC) && !cancelled)
     {
         /* return selected item if no callbacks have been provided */
         return inv_get_filtered(*inv, s.offset + s.curr - 1, ifilter);
@@ -3905,6 +4206,204 @@ int display_menu(const char *title, const char *message,
                            details, n_options, initial);
 }
 
+/* RVIP: a content-sized floating list with a key column (command menu,
+   item action menu) */
+static bool key_menu_row_ok(const display_menu_item *items, guint n, int i)
+{
+    return i >= 0 && (guint)i < n && items[i].key != 0;
+}
+
+static int key_menu_step(const display_menu_item *items, guint n, int sel, int dir)
+{
+    for (int i = sel + dir; i >= 0 && (guint)i < n; i += dir)
+        if (key_menu_row_ok(items, n, i))
+            return i;
+    return sel;
+}
+
+int display_key_menu(const char *title, const display_menu_item *items,
+                     guint n_items, guint initial)
+{
+    guint keyw = 0, textw = 0;
+    for (guint i = 0; i < n_items; i++)
+    {
+        if (items[i].key != 0)
+            keyw = max(keyw, (guint)g_utf8_strlen(items[i].label, -1));
+        textw = max(textw, (guint)g_utf8_strlen(items[i].text, -1));
+    }
+
+    /* " key  text " inside the border; the title needs room for the
+       close button */
+    guint width = 1 + keyw + 2 + textw + 1 + 2;
+    width = max(width, (guint)g_utf8_strlen(title, -1) + 10);
+    width = min(width, (guint)COLS - 2);
+    if (textw > width - keyw - 6)
+        textw = width - keyw - 6;
+
+    const guint rows = min(n_items, (guint)LINES - 4);
+    const guint height = rows + 2;
+
+    display_window *mwin = display_window_new((COLS - width) / 2,
+            (LINES - height) / 2, width, height, title);
+
+    int sel = (int)initial;
+    if (!key_menu_row_ok(items, n_items, sel))
+        sel = key_menu_step(items, n_items, -1, 1);
+
+    guint offset = 0;
+    int autoscroll = 0;
+    int ret = -1;
+    bool run = true;
+
+    while (run)
+    {
+        /* keep the cursor (and the heading right above it) visible */
+        if ((guint)sel < offset)
+            offset = sel;
+        if ((guint)sel >= offset + rows)
+            offset = sel - rows + 1;
+        if (sel > 0 && (guint)sel == offset && items[sel - 1].key == 0)
+            offset--;
+
+        for (guint r = 0; r < rows; r++)
+        {
+            const guint i = offset + r;
+            const display_menu_item *it = &items[i];
+
+            if (it->key == 0)
+            {
+                mvwhline(mwin->window, r + 1, 1, ACS_HLINE | CP_UI_BORDER, width - 2);
+                mvwaprintw(mwin->window, r + 1, 2, CP_UI_BRIGHT_FG | A_BOLD,
+                           " %s ", it->text);
+                continue;
+            }
+
+            char *txt = g_strdup(it->text);
+            if ((guint)g_utf8_strlen(txt, -1) > textw)
+            {
+                /* too wide for the screen: cut with an ellipsis */
+                gchar *cut = g_utf8_offset_to_pointer(txt, textw - 1);
+                *cut = '\0';
+                gchar *t2 = g_strconcat(txt, "\xE2\x80\xA6", NULL);
+                g_free(txt);
+                txt = t2;
+            }
+
+            if ((int)i == sel)
+            {
+                mvwaprintw(mwin->window, r + 1, 1, CP_UI_FG_REVERSE,
+                           " %-*s  %-*s ", utf8_pad(it->label, keyw), it->label,
+                           utf8_pad(txt, width - keyw - 6), txt);
+            }
+            else
+            {
+                mvwaprintw(mwin->window, r + 1, 1, CP_UI_BRIGHT_FG,
+                           " %-*s  ", utf8_pad(it->label, keyw), it->label);
+                mvwaprintw(mwin->window, r + 1, keyw + 4, CP_UI_FG,
+                           "%-*s ", utf8_pad(txt, width - keyw - 6), txt);
+            }
+            g_free(txt);
+        }
+
+        display_window_scrollbar(mwin, offset, rows, n_items);
+        wrefresh(mwin->window);
+
+        const int key = display_scroll_getch(mwin, &autoscroll);
+
+        switch (key)
+        {
+        case KEY_ESC:
+            run = false;
+            break;
+
+        case KEY_UP:
+            sel = key_menu_step(items, n_items, sel, -1);
+            break;
+
+        case KEY_DOWN:
+            sel = key_menu_step(items, n_items, sel, 1);
+            break;
+
+        case KEY_PPAGE:
+        case KEY_HOME:
+            for (guint k = 0; k < (key == KEY_HOME ? n_items : rows); k++)
+                sel = key_menu_step(items, n_items, sel, -1);
+            break;
+
+        case KEY_NPAGE:
+        case KEY_END:
+            for (guint k = 0; k < (key == KEY_END ? n_items : rows); k++)
+                sel = key_menu_step(items, n_items, sel, 1);
+            break;
+
+        case KEY_LF:
+        case KEY_CR:
+#ifdef PADENTER
+        case PADENTER:
+#endif
+        case KEY_ENTER:
+        case KEY_SPC:
+            ret = sel;
+            run = false;
+            break;
+
+        case KEY_MOUSE:
+            if (display_mouse_event.bstate & (BUTTON1_PRESSED | BUTTON1_CLICKED))
+            {
+                const int row = display_mouse_event.y - (int)mwin->y1;
+                const int col = display_mouse_event.x - (int)mwin->x1;
+                const int i = (int)offset + row - 1;
+
+                if (row >= 1 && row <= (int)rows && col >= 1
+                        && col < (int)width - 1 && key_menu_row_ok(items, n_items, i))
+                {
+                    ret = i;
+                    run = false;
+                    break;
+                }
+            }
+            display_window_move(mwin, key);
+            break;
+
+        default:
+        {
+            /* a row's own key chooses it */
+            bool found = false;
+            for (guint i = 0; i < n_items; i++)
+            {
+                if (items[i].key != 0 && items[i].key == key)
+                {
+                    ret = (int)i;
+                    run = false;
+                    found = true;
+                    break;
+                }
+            }
+            if (found)
+                break;
+
+            /* numpad */
+            if (key == '8')
+                sel = key_menu_step(items, n_items, sel, -1);
+            else if (key == '2')
+                sel = key_menu_step(items, n_items, sel, 1);
+            else if (key == '5' || key == '6')
+            {
+                ret = sel;
+                run = false;
+            }
+            else if (key == '4' || key == '0')
+                run = false;
+            else
+                display_window_move(mwin, key);
+        }
+        }
+    }
+
+    display_window_destroy(mwin);
+    return ret;
+}
+
 void display_window_destroy(display_window *dwin)
 {
     del_panel(dwin->panel);
@@ -4275,11 +4774,19 @@ static void display_inventory_help(GPtrArray *callbacks)
     if (callbacks == NULL || callbacks->len == 0)
     {
         /* no callbacks available => select item with ENTER */
-        g_string_append(help, _("Select the desired item with ENTER.\n"
+        g_string_append(help, _("Choose an item with its letter, or move the "
+                        "cursor and press ENTER (or click it).\n"
+                        "Ctrl+letter shows an item's details.\n"
                         "You may abort by pressing the escape key."));
     }
     else
     {
+        g_string_append(help, _("Letter: the item's main action.\n"
+                        "Shift+letter: drop (inventory).\n"
+                        "Ctrl+letter: show the item's details.\n"
+                        "ENTER, SPACE or a click: the item's menu.\n"
+                        "In the item menu:\n\n"));
+
         /* determine the maximum length of the description */
         for (guint i = 0; i < callbacks->len; i++)
         {

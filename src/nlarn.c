@@ -363,6 +363,110 @@ static void nlarn_init(int argc, char *argv[])
     g_log_set_default_handler(nlarn_assert_handler, NULL);
 }
 
+/* RVIP 3b: the command menu (Enter at the command prompt). Built from the
+   help file: every "`KEY`k`end`  description" line at a line start is a
+   command, grouped under the help's `TITLE` headings. The movement and
+   running tables are pictures, not such lines, so they are left out, as
+   are keys that only work inside lists (page up) and, outside wizard
+   mode, the wizard keys except ^W. Returns the chosen key or 0. */
+static int help_key_code(const char *name)
+{
+    if (strcmp(name, "TAB") == 0)
+        return KEY_TAB;
+    if (g_str_has_prefix(name, "CTRL+") && strlen(name) == 6
+            && isalpha((unsigned char)name[5]))
+        return g_ascii_toupper(name[5]) - '@';
+    if (g_utf8_strlen(name, -1) == 1)
+        return (int)g_utf8_get_char(name);
+    return 0;
+}
+
+static int command_menu(void)
+{
+    gchar *strbuf = NULL;
+    if (!g_file_get_contents(nlarn_helpfile, &strbuf, NULL, NULL))
+        return 0;
+
+    gchar **lines = g_strsplit(strbuf, "\n", -1);
+    g_free(strbuf);
+
+    GArray *rows = g_array_new(false, true, sizeof(display_menu_item));
+    GPtrArray *strings = g_ptr_array_new_with_free_func(g_free);
+    char *group = NULL;
+    bool group_shown = false;
+    bool seen[512] = { false };
+
+    for (guint l = 0; lines[l] != NULL; l++)
+    {
+        const char *line = lines[l];
+
+        if (g_str_has_prefix(line, "`TITLE`"))
+        {
+            /* a heading: remember it until its first command */
+            const char *t = line + 7;
+            const char *e = strstr(t, "`end`");
+            g_free(group);
+            group = e ? g_strndup(t, e - t) : g_strdup(t);
+            group_shown = false;
+            continue;
+        }
+
+        if (!g_str_has_prefix(line, "`KEY`"))
+            continue;
+
+        const char *k = line + 5;
+        const char *e = strstr(k, "`end`");
+        if (e == NULL)
+            continue;
+
+        gchar *name = g_strndup(k, e - k);
+        const int key = help_key_code(name);
+        const bool wizard_group = group && strstr(group, "Wizard");
+
+        if (key <= 0 || key >= 512 || seen[key] || key == 21 /* ^U: page up */
+                || (wizard_group && !game_wizardmode(nlarn) && key != 23))
+        {
+            g_free(name);
+            continue;
+        }
+        seen[key] = true;
+
+        if (!group_shown && group)
+        {
+            display_menu_item h = { 0, "", g_strdup(group) };
+            g_ptr_array_add(strings, (gpointer)h.text);
+            g_array_append_val(rows, h);
+            group_shown = true;
+        }
+
+        /* the description without markup; the label as in the help,
+           "CTRL+A" shortened to "^A" */
+        gchar *raw = g_strstrip(g_strdup(e + 5));
+        gchar *desc = str_strip(raw);
+        g_free(raw);
+        gchar *label = g_str_has_prefix(name, "CTRL+")
+            ? g_strdup_printf("^%s", name + 5) : g_strdup(name);
+        g_free(name);
+
+        display_menu_item r = { key, label, desc };
+        g_ptr_array_add(strings, label);
+        g_ptr_array_add(strings, desc);
+        g_array_append_val(rows, r);
+    }
+
+    g_strfreev(lines);
+    g_free(group);
+
+    int sel = display_key_menu(_("Commands"), (display_menu_item *)rows->data,
+                               rows->len, 0);
+    int key = (sel >= 0) ? g_array_index(rows, display_menu_item, sel).key : 0;
+
+    g_array_free(rows, true);
+    g_ptr_array_free(strings, true);
+
+    return key;
+}
+
 static void mainloop()
 {
     /* count of moves used by last action */
@@ -484,6 +588,16 @@ static void mainloop()
         {
             /* not running or travelling, get a key and handle it */
             ch = display_getch(NULL);
+
+            /* RVIP 3b: Enter opens the command menu; the chosen command
+               runs as if its key had been pressed */
+            if (ch == KEY_LF || ch == KEY_CR || ch == KEY_ENTER)
+            {
+#ifdef SDLPDCURSES
+                if (!(PDC_get_key_modifiers() & PDC_KEY_MODIFIER_ALT))
+#endif
+                ch = command_menu();
+            }
 
             if (ch == '/' || ch == 'g')
             {
@@ -858,7 +972,12 @@ static void mainloop()
 
             /* display inventory */
         case 'i':
-            player_inv_display(nlarn->p);
+            player_inv_display_list(nlarn->p, false);
+            break;
+
+            /* RVIP 3c: the equipment list */
+        case 'e':
+            player_inv_display_list(nlarn->p, true);
             break;
 
             /* open door / container */

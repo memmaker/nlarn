@@ -350,6 +350,8 @@ char *player_equipment_list(player *p);
 
 /* dealing with the inventory */
 int player_inv_display(player *p);
+/* RVIP 3c: the inventory (false) or the equipment list (true) */
+int player_inv_display_list(player *p, bool equipment);
 char *player_can_carry(player *p);
 char *player_inv_weight(player *p);
 

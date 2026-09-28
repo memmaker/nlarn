@@ -2,8 +2,58 @@
 
 ## RVIP progress
 
-**Stage 1 (get + build): done.** **Stage 2 (explore + stairs): done.** Next: stage 3
-(Enter menu, inventory with cursor).
+**Stage 1 (get + build): done.** **Stage 2 (explore + stairs): done.**
+**Stage 3 (Enter menu + inventory): done.** Next: stage 4 (tiles).
+
+Stage 3 facts:
+- **Menu widget:** `display_key_menu(title, display_menu_item[], n, initial)` in
+  `src/display.c` (decl. `inc/display.h`): content-sized floating list (key column +
+  text, rows with key 0 = group headings, scrolls when taller than the screen),
+  arrows / 8 / 2 / wheel / PgUp / PgDn move, Enter / Space / 5 / 6 / click choose,
+  a row's own key chooses it, Esc / 4 / 0 cancel. Returns the row index or -1.
+- **Enter menu (3b):** `command_menu()` in `src/nlarn.c`, parsed at run time from
+  `lib/nlarn.hlp`: every line starting with `` `KEY`k`end` `` is a command, grouped
+  under the help's `` `TITLE` `` headings (Auto-travel, Other actions, Control Keys,
+  Wizard Mode Actions). Movement / running are pictures in the help, so they are not
+  in the menu (Finetuning "Movement"). Skipped: duplicate keys (first wins: `<`/`>`
+  from Auto-travel, `^D` = landmarks), `^U` (list paging), wizard keys except `^W`
+  outside wizard mode. `mainloop()`: right after `ch = display_getch(NULL)`, Enter
+  (LF/CR/KEY_ENTER) becomes `ch = command_menu()`, so the chosen key runs through
+  the normal `switch` with its own prompts (`g` then asks for a direction).
+  Help lines were shortened so the menu fits 90 columns (`<`/`>`), `e` added.
+- **Inventory (3c):** extended `display_inventory()` (`src/display.c`), not replaced.
+  Every list shows page-relative letters `a)`... (a = first item row shown). Lists
+  with callbacks: letter = main action, Shift+letter = drop (player lists only),
+  Ctrl+letter = examine (not ^I/^J/^M: Tab/Enter), Enter/Space/5/click on a row =
+  item menu (`inv_item_menu()`: every fitting callback with its key + `x` examine,
+  cursor on the main action), `+` `-` `*` = main/drop/examine on the cursor row,
+  `0`/`.` close, `4`/`6`/left/right switch inventory <-> equipment, any other key
+  closes the list and is `ungetch()`ed to run as a command. Caption: "(Enter)
+  actions (?) help" (clickable). Width sized to content (`inv_content_width()`).
+- **How item actions run: direct calls** of the callback functions
+  (`cb->function(p, cb->inv, item)`), no key queue. Main action =
+  first fitting callback with the new `display_inv_callback.primary` flag (player
+  inventory: equip, open, unequip, use); in other lists (shops, floor, containers,
+  home) the first fitting callback; none = examine (`inv_examine()`: item details
+  in a message window). After an action the list reopens unless
+  `player_visible_threats(p, false)` is non-empty.
+- `i` / `e`: `player_inv_display_list(p, equipment)` in `src/player.c` (filter
+  `player_inv_filter_equipped`); `player_inv_display(p)` kept as a wrapper. It sets
+  the globals `display_inv_main` (switching, drop, pass-through; `display_inventory`
+  clears it for nested lists) and reads `display_inv_switch`.
+- Item prompts (`display_inventory` without callbacks, e.g. "Choose an item to
+  drop"): letter / Enter / 5 / click choose, Ctrl+letter examines, `0`/`.` cancel.
+  NLarn prompts show one list, so there is no inventory/equipment/floor switch there.
+- **Town chatter fix:** `explore_monster_logged(m, from)` (`src/explore.c`) is called
+  from `monsters.c` right after a townsperson's talk and "bumps into you"; when
+  `monster_is_friendly(m)` (MA_CIVILIAN / MA_SERVE) the text the monster added to the
+  log buffer is recorded and ignored by `new_message()` for that step. Tested with a
+  scratch build that makes townsfolk talk every turn within 6 cells: `>` walks reach
+  the caverns entrance through the chatter.
+- Tested: native pty build (`TERM=screen-256color`: pyte ignores the REP sequence of
+  xterm-256color, which left stale cells in scrolled lists) incl. ASan+UBSan, and
+  headless Chromium on `web/dist` (Enter menu, click on a menu row, click on an item
+  row -> item menu, click examine, menu `X`). No errors.
 
 Stage 2 facts:
 - Explore key **`X`** (`x` is NLarn's weapon swap; `e` kept free for the 3c
@@ -90,7 +140,6 @@ Stage 2 facts:
   v1.3.2 https://github.com/madler/zlib` plus a `.emscripten_url` file holding the
   archive URL; on the Mac `-sUSE_ZLIB=1` just downloads.
 
-Open problems: town chatter ("The bar maid says ...") stops walks as a new
-message (by the rule). Game end (main returns) leaves a dead page; no pane routing,
+Open problems: Game end (main returns) leaves a dead page; no pane routing,
 tiles, help button or rvip-wm layout yet (stage 4/5); translations not shipped
 (English only, `g_get_language_names()` = "C").

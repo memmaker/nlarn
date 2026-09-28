@@ -22,6 +22,7 @@
 
 #include "colours.h"
 #include "display.h"
+#include "explore.h"
 #include "fov.h"
 #include "game.h"
 #include "items.h"
@@ -1833,8 +1834,11 @@ void monster_move(gpointer *oid __attribute__((unused)), monster *m, game *g)
                    current position. */
                 monster_update_player_pos(m, g->p->pos);
 
+                const gsize bump_from = g->log->buffer->len;
                 log_add_entry(g->log, _("%s bumps into you."),
                         monster_get_name_art(m, ART_DEF, GC_NOM, true));
+                /* RVIP: a townsperson's bump does not stop walks */
+                explore_monster_logged(m, bump_from);
             }
 
             /* check for door */
@@ -4062,9 +4066,12 @@ static position monster_move_civilian(monster *m, struct player *p)
         && so_is_transparent(map_sobject_at(monster_map(m), p->pos)))
     {
         /* talk */
+        const gsize said_from = nlarn->log->buffer->len;
         log_add_entry(nlarn->log, _("%s says, \"%s\""),
                       monster_get_name_art(m, ART_DEF, GC_NOM, true),
                       monster_get_fortune(nlarn_fortunes));
+        /* RVIP: peaceful talk does not stop auto-explore / stair walks */
+        explore_monster_logged(m, said_from);
     }
 
     /* change the town person's name from time to time */

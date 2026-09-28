@@ -41,4 +41,9 @@ void explore_after_turn(player *p, bool no_move, bool was_attacked);
    Returns true when the original command should run. */
 bool explore_stairs_here(player *p, bool down);
 
+/* a monster's doing was just logged (the log buffer from byte 'from' on):
+   when the monster is peaceful (townsperson, servant: monster_is_friendly())
+   the message does not stop a walk (town chatter, bumping into the hero) */
+void explore_monster_logged(monster *m, gsize from);
+
 #endif
