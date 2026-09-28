@@ -4,7 +4,8 @@
 
 **Stage 1 (get + build): done.** **Stage 2 (explore + stairs): done.**
 **Stage 3 (Enter menu + inventory): done.** **Stage 4 (tiles): done.**
-**Stage 5 (web page, windows, finetuning): done.** Next: stage 6 (docs + sound).
+**Stage 5 (web page, windows, finetuning): done.** **Stage 6 (docs + sound): done.**
+Next: stage 7 (publish).
 
 **Deploy (on the Mac, nothing was deployed from the cloud):**
 ```
@@ -16,6 +17,38 @@ curl -sI https://ruzzoli.de/roguelikes/nlarn/nlarn-core.wasm | grep -i content-t
 (`deploy.sh` refuses to run from an unclean or unpushed tree. The page loads
 `../rvip-wm.js`, `../rvip-app.js` and `../fonts/`: run `roguelikes-index/deploy.sh`
 too if rvip-tools changed since its last deploy.)
+
+Stage 6 facts:
+- **Sound events:** `SOUND("event")` (`inc/display.h`, no-op without `__EMSCRIPTEN__`,
+  web: `be_sound()` in `port/be_web.c` -> `Module.nl.sound`). Hooked at the game action:
+  hit / miss (`player_attack`), kill (`monster_die` with a player), mon_hit / breathe
+  (`monster_player_attack`), death (`player_die`, real deaths only), level
+  (`player_level_gain`), spell (`spell_cast`), quaff, study (scroll read), pickup / money1,
+  drop, wield / wear, opendoor / shutdoor, stairs_up / stairs_down, store_enter / store_home
+  (`player_building_enter`), store5 (`building_player_charge`), shoot / shoot_hit (bows,
+  thrown weapons). 24 events.
+- **Samples:** Dubtrain Angband Sound Pack (CC BY 4.0) mp3s from upstream Angband,
+  vendored in `web/sound/` (52 files, 645 KB, `sounds.json`, `README` credit), made by
+  `python3 web/sounds.py [angband-checkout]` (reads `lib/customize/sound.prf`, asserts a
+  sample for every `SOUND()` event in `src/*.c`; melee miss = `plc_miss_swish`, pickup =
+  `plm_chest_latch`). `build.sh` copies `web/sound` -> `dist/sound`. JS picks a random file
+  per event and plays it with `../rvip-sound.js` (rvip-tools: names with an extension are
+  now used as is, so `.mp3` works). Nothing is fetched while Sound effects is off.
+- **Music:** as larn/ularn, `new_town.ogg` looped in town (level 0). `build.sh` copies it
+  only if `~/Projects/heavenAndHell/files/mods/heavenandhell/music/new_town.ogg` exists (the
+  Mac); the cloud build has none, so switching Music on greys the checkbox out ("No music
+  in this build"). **Rebuild on the Mac to ship the music.**
+- Audio off by default, stored in `web-layout.json` (`audio.sound/music`). Favicon `data:`.
+- **Help** (`web/make-help.py`): essentials, full key list from `lib/nlarn.hlp`, keys to
+  remember (`?`, `X`, Enter, `i`, `<`/`>`, `^S`), saving, tips, new-player guide, In the
+  browser (incl. audio), Credits (Joachim de Groot per source headers/debian/copyright,
+  Johanna Ploog from git history, GPL-3+, Larn/ULarn heritage, Amiga tiles MIT, Dubtrain
+  CC BY 4.0, int10h fonts), About this version.
+- Tested headless: sound off -> 0 requests to `sound/`; real clicks Audio ▾ -> Sound effects
+  -> `sound/sounds.json`, `plm_floor_creak.mp3`, `mco_hit_whip.mp3`, `plm_floor_creak2.mp3`,
+  `plc_die_laugh.mp3`, `plm_chest_latch.mp3` requested; events stairs_down/up, mon_hit,
+  pickup, death seen; layout stores `{"sound":true,"music":false}`. Music click in the cloud
+  build -> checkbox unchecked + disabled. No console errors.
 
 Stage 5 facts:
 - **Web page files:** `web/index.html` (top bar `Help · File ▾ | Windows ▾ · Tiles ·

@@ -198,6 +198,7 @@ int weapon_fire(struct player *p, position target)
     g_list_free(ray);
 
     /* log the event */
+    SOUND("shoot");
     log_add_entry(nlarn->log, _("You fire %s at %s."), wdesc,
             monster_get_name_art(m, ART_DEF, GC_ACC, false));
     g_free(wdesc);
@@ -516,6 +517,8 @@ bool weapon_shoot_hit(const GList *traj,
         if (hit)
         {
             damage *dam = weapon_get_ranged_damage(damo, weapon, ammo);
+            if (damo->ot == DAMO_PLAYER)
+                SOUND("shoot_hit");
 
             if (monster_in_sight(m))
                 log_add_entry(nlarn->log, _("%s hits %s."),
@@ -601,6 +604,7 @@ bool weapon_throw_pos_hit(const GList *traj,
                 log_add_entry(nlarn->log, _("%s hits %s."), wdesc,
                               monster_get_name_art(m, ART_DEF, GC_ACC, false));
 
+            SOUND("shoot_hit");
             damage *dam = damage_new(DAM_PHYSICAL, ATT_WEAPON, weapon_damage(weapon),
                                      DAMO_PLAYER, nlarn->p);
             /* the monster may not survive this hit */

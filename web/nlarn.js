@@ -262,12 +262,51 @@
 		applyDom(); saveLayout();
 	}
 
-	/* ---------- audio (stage 6 adds the sounds; the switches are kept already) ---------- */
-	function toggleAudio(k) { L.audio[k] = !L.audio[k]; renderAudio(); saveLayout(); }
+	/* ---------- audio ---------- */
+	/* sound events come from the game (SOUND() -> port/be_web.c), named like the Dubtrain
+	 * Angband Sound Pack's (web/sounds.py picks the samples); rvip-sound.js plays them.
+	 * Nothing is fetched until Sound effects is on. Music: the Larn siblings' town loop,
+	 * only in builds that have music/new_town.ogg (web/build.sh). */
+	var audio = { cfg: null, loading: false, town: false, el: null, played: 0, noMusic: false };
+	function play(name) {
+		if (!L || !L.audio.sound) return;
+		if (!audio.cfg) {
+			if (!audio.loading) {
+				audio.loading = true;
+				fetch('sound/sounds.json').then(function (r) { return r.json(); })
+					.then(function (c) { audio.cfg = c; }).catch(function () { audio.loading = false; });
+			}
+			return;
+		}
+		var files = audio.cfg[name];
+		if (!files || !files.length) return;
+		audio.played++;                          /* testing */
+		RVIPSound.play([files[Math.floor(Math.random() * files.length)]], 0.6);
+	}
+	function updateMusic() {
+		var on = L && L.audio.music && audio.town && app.running && !audio.noMusic;
+		if (on && !audio.el) {
+			audio.el = new Audio('music/new_town.ogg');
+			audio.el.loop = true; audio.el.volume = 0.4;
+			audio.el.onerror = function () {        /* this build has no music */
+				audio.noMusic = true; audio.el = null;
+				L.audio.music = false; renderAudio(); saveLayout();
+			};
+		}
+		if (!audio.el) return;
+		if (on) audio.el.play().catch(function () { }); else audio.el.pause();
+	}
+	function toggleAudio(k) {
+		L.audio[k] = !L.audio[k];
+		if (k === 'sound' && L.audio.sound && !audio.cfg) play('');   /* load the event list */
+		renderAudio(); updateMusic(); saveLayout();
+	}
 	function renderAudio() {
 		var a = L ? L.audio : { sound: false, music: false };
 		$('chk-sound').checked = a.sound;
-		$('chk-music').checked = a.music;
+		$('chk-music').checked = a.music && !audio.noMusic;
+		$('chk-music').disabled = audio.noMusic;
+		$('chk-music').parentNode.title = audio.noMusic ? 'No music in this build' : 'Music on or off (town)';
 	}
 
 	/* ---------- called by the game (port/be_web.c) ---------- */
@@ -322,6 +361,7 @@
 			if (y === hero.y && x === hero.x && z === hero.z) return;
 			var oy = hero.y, ox = hero.x;
 			hero.y = y; hero.x = x; hero.z = z;
+			if ((z === 0) !== audio.town) { audio.town = z === 0; updateMusic(); }
 			if (panes[P_MAP] && oy >= 0) cell(P_MAP, oy, ox);
 			scrollMap();
 		},
@@ -339,8 +379,10 @@
 		},
 		sync: function () { app.sync(); },
 		bell: function () { },
+		sound: function (name) { play(name); },
+		sounds: function () { return audio.played; },   /* testing */
 		end: function () {                               /* main() returned: quit, or saved and quit */
-			app.running = false;
+			app.running = false; updateMusic();
 			status(hasSave() ? 'Game saved. Restarting…' : 'Starting a new game…');
 			app.sync(function () { setTimeout(function () { location.reload(); }, 800); });
 		}

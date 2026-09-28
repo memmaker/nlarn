@@ -36,6 +36,7 @@ extern int web_at_cmd;                        /* the game waits for a command (a
 int be_getkey(int timeout_ms);                /* -1 blocks; returns -1 on timeout */
 void be_sleep(int ms);
 void be_bell(void);
+void be_sound(const char *event);            /* sound event (SOUND() in inc/display.h) */
 
 /* keys from the frontend: plain codes are characters / curses KEY_*,
  * mouse events are BE_MOUSE | button << 16 | y << 8 | x */

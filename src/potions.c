@@ -148,6 +148,7 @@ item_usage_result potion_quaff(struct player *p, item *potion)
     }
 
     g_free(description);
+    SOUND("quaff");
 
     /* the potion has successfully been quaffed */
     result.used_up = true;

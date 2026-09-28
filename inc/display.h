@@ -35,6 +35,15 @@
 #include "items.h"
 #include "player.h"
 
+/* RVIP web port: SOUND("event") names a sound event at the game action
+   (Dubtrain Angband Sound Pack event names, web/sounds.py); no-op elsewhere */
+#ifdef __EMSCRIPTEN__
+void be_sound(const char *event);
+#  define SOUND(e) be_sound(e)
+#else
+#  define SOUND(e) ((void) 0)
+#endif
+
 /* missing key definitions */
 #define KEY_BS   8 /* backspace */
 #define KEY_TAB  9 /* tab */

@@ -1476,6 +1476,9 @@ void monster_die(monster *m, struct player *p)
 {
     g_assert(m != NULL);
 
+    if (p != NULL)
+        SOUND("kill");
+
     /* if the player can see the monster describe the event */
     /* Also give a message for invisible monsters you killed yourself
        (the xp gain gives this away anyway). */
@@ -2266,6 +2269,8 @@ void monster_player_attack(monster *m, player *p)
 
     /* No attack has been found. Return to calling function. */
     if (att.type == ATT_NONE) return;
+
+    SOUND(att.type == ATT_BREATH ? "breathe" : "mon_hit");
 
     /* handle breath attacks separately */
     if (att.type == ATT_BREATH)

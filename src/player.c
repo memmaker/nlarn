@@ -1115,6 +1115,9 @@ void player_die(player *p, player_cod cause_type, guint cause)
         return;
     }
 
+    if (cause_type < PD_TOO_LATE || cause_type == PD_RICOCHET)
+        SOUND("death");
+
     switch (cause_type)
     {
     case PD_LASTLEVEL:
@@ -1475,6 +1478,7 @@ int player_attack(player *p, monster *m)
         effect *e;
 
         /* placed a hit */
+        SOUND("hit");
         log_add_entry(nlarn->log, _("You hit %s."),
                 monster_get_name_art(m, ART_DEF, GC_ACC, false));
 
@@ -1556,6 +1560,7 @@ int player_attack(player *p, monster *m)
     else
     {
         /* missed */
+        SOUND("miss");
         log_add_entry(nlarn->log, _("You miss %s."),
                 monster_get_name_art(m, ART_DEF, GC_ACC, false));
     }
@@ -1821,6 +1826,7 @@ void player_level_gain(player *p, int count)
     const char *desc_orig = player_get_level_desc(p);
 
     p->level += count;
+    SOUND("level");
 
     const char *desc_new = player_get_level_desc(p);
 
@@ -3096,6 +3102,7 @@ void player_item_equip(player *p, inventory **inv __attribute__((unused)), item 
             /* Refresh the armour's description before logging. */
             g_free(desc);
             desc = item_describe(it, known, true, false);
+            SOUND("wear");
             log_add_entry(nlarn->log, _("You are now wearing %s."), desc);
 
             /* put the piece of armour in the equipment slot */
@@ -3146,6 +3153,7 @@ void player_item_equip(player *p, inventory **inv __attribute__((unused)), item 
             }
 
             p->eq_weapon = it;
+            SOUND("wield");
             log_add_entry(nlarn->log, _("You now wield %s."), desc);
         }
         break;
@@ -4168,6 +4176,7 @@ void player_item_drop(player *p, inventory **inv, item *it)
     }
 
     g_free(buf);
+    SOUND("drop");
 
     if (it->type == IT_GOLD)
     {
@@ -4875,6 +4884,8 @@ static guint player_item_pickup(player *p, inventory **inv, item *it, bool ask)
 
         return 2;
     }
+
+    SOUND(gold_amount > 0 ? "money1" : "pickup");
 
     if (gold_amount > 0)
     {

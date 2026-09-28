@@ -188,4 +188,10 @@ void be_sleep(int ms)
 
 void be_bell(void) { js_bell(); }
 
+/* RVIP 6b: SOUND("event") in the game (inc/display.h); the page picks a sample */
+EM_JS(void, js_sound, (const char *e), {
+    if (Module.nl.sound) Module.nl.sound(UTF8ToString(e));
+});
+void be_sound(const char *event) { js_sound(event); }
+
 void web_sync_files(void) { js_sync(); }

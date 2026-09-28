@@ -141,6 +141,7 @@ item_usage_result scroll_read(struct player *p, item *r_scroll)
         g_free(desc);
         return result;
     }
+    SOUND("study");
 
     g_free(desc);
 

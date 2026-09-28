@@ -340,8 +340,15 @@ int player_altar_pray(player *p)
 int player_building_enter(player *p)
 {
     int moves_count = 0;
+    sobject_t so = map_sobject_at(game_map(nlarn, Z(p->pos)), p->pos);
 
-    switch (map_sobject_at(game_map(nlarn, Z(p->pos)), p->pos))
+    if (so == LS_HOME)
+        SOUND("store_home");
+    else if (so == LS_BANK || so == LS_BANK2 || so == LS_DNDSTORE || so == LS_LRS
+             || so == LS_SCHOOL || so == LS_TRADEPOST || so == LS_MONASTERY)
+        SOUND("store_enter");
+
+    switch (so)
     {
     case LS_BANK:
     case LS_BANK2:
@@ -460,6 +467,7 @@ int player_door_close(player *p)
             }
 
             map_sobject_set(pmap, pos, LS_CLOSEDDOOR);
+            SOUND("shutdoor");
             log_add_entry(nlarn->log, _("You close the door."));
         }
         else
@@ -531,6 +539,7 @@ int player_door_open(player *p, int dir)
         if (pos_valid(pos) && (map_sobject_at(pmap, pos) == LS_CLOSEDDOOR))
         {
             map_sobject_set(pmap, pos, LS_OPENDOOR);
+            SOUND("opendoor");
             log_add_entry(nlarn->log, _("You open the door."));
         }
         else
@@ -848,6 +857,7 @@ int player_stairs_down(player *p)
             player_damage_take(p, dam, PD_SOBJECT, ms);
         }
 
+        SOUND("stairs_down");
         return player_map_enter(p, nlevel, false);
     }
 
@@ -896,6 +906,7 @@ int player_stairs_up(player *p)
     /* if told to switch level, do so */
     if (nlevel != NULL)
     {
+        SOUND("stairs_up");
         return player_map_enter(p, nlevel, false);
     }
 

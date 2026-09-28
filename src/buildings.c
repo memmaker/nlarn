@@ -1349,6 +1349,7 @@ static int building_player_check(player *p, guint amount)
 
 static void building_player_charge(player *p, guint amount)
 {
+    SOUND("store5");
     if (p->bank_account >= amount)
     {
         p->bank_account -= amount;

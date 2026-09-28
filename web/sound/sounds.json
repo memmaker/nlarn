@@ -1,0 +1,104 @@
+{
+"breathe": [
+"mco_attack_breath.mp3"
+],
+"death": [
+"plc_die_laugh.mp3"
+],
+"drop": [
+"plm_drop_boot.mp3"
+],
+"hit": [
+"plc_hit_hay.mp3",
+"plc_hit_body.mp3"
+],
+"kill": [
+"mco_howl_croak.mp3",
+"mco_howl_deep.mp3",
+"mco_howl_distressed.mp3",
+"mco_howl_high.mp3",
+"mco_howl_long.mp3"
+],
+"level": [
+"plm_levelup.mp3"
+],
+"miss": [
+"plc_miss_swish.mp3"
+],
+"mon_hit": [
+"mco_hit_whip.mp3"
+],
+"money1": [
+"plm_coins_light.mp3",
+"plm_coins_shake.mp3"
+],
+"opendoor": [
+"plm_door_bolt.mp3",
+"plm_door_creak.mp3",
+"plm_door_dungeon.mp3",
+"plm_door_entrance.mp3",
+"plm_door_open.mp3",
+"plm_door_opening.mp3",
+"plm_door_rusty.mp3",
+"plm_door_squeaky.mp3"
+],
+"pickup": [
+"plm_chest_latch.mp3"
+],
+"quaff": [
+"plm_bottle_clinks.mp3",
+"plm_cork_pop.mp3",
+"plm_cork_squeak.mp3"
+],
+"shoot": [
+"plc_miss_arrow.mp3"
+],
+"shoot_hit": [
+"plc_hit_arrow.mp3"
+],
+"shutdoor": [
+"plm_bang_dumpster.mp3",
+"plm_cabinet_shut.mp3",
+"plm_close_hatch.mp3",
+"plm_door_creakshut.mp3",
+"plm_door_latch.mp3",
+"plm_door_shut.mp3",
+"plm_door_slam.mp3"
+],
+"spell": [
+"plm_spell1.mp3",
+"plm_spell2.mp3",
+"plm_spell3.mp3"
+],
+"stairs_down": [
+"plm_floor_creak.mp3"
+],
+"stairs_up": [
+"plm_floor_creak2.mp3"
+],
+"store5": [
+"sto_coins_countertop.mp3",
+"sto_bell_register1.mp3",
+"sto_bell_register2.mp3"
+],
+"store_enter": [
+"sto_bell_desk.mp3",
+"sto_bell_ding.mp3",
+"sto_bell_dingaling.mp3",
+"sto_bell_jingles.mp3",
+"sto_bell_ringing.mp3",
+"sto_bell_shop.mp3"
+],
+"store_home": [
+"plm_door_entrance.mp3"
+],
+"study": [
+"plm_book_pageturn.mp3"
+],
+"wear": [
+"plm_metal_sharpen.mp3"
+],
+"wield": [
+"plm_metal_sharpen.mp3"
+]
+}

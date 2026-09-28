@@ -1831,6 +1831,7 @@ static int spell_cast(player *p, spell *s)
     }
 
     log_add_entry(nlarn->log, _("You cast %s."), spell_name(s));
+    SOUND("spell");
 
     /* time usage */
     turns = 1;
