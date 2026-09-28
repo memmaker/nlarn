@@ -2,7 +2,46 @@
 
 ## RVIP progress
 
-**Stage 1 (get + build): done.** Next: stage 2 (explore + stairs).
+**Stage 1 (get + build): done.** **Stage 2 (explore + stairs): done.** Next: stage 3
+(Enter menu, inventory with cursor).
+
+Stage 2 facts:
+- Explore key **`X`** (`x` is NLarn's weapon swap; `e` kept free for the 3c
+  equipment list). Code: `src/explore.c` + `inc/explore.h` (new), hooks in
+  `src/nlarn.c` `mainloop()`: `explore_reset()` before the loop, `explore_visit()`
+  after the repaint at the loop top, `else if (explore_active()) moves_count =
+  explore_step()` between the travel branch and the run branch,
+  `explore_after_turn(p, no_move, was_attacked)` after `player_update_fov()`;
+  `case 'X'`, and `<`/`>` call `explore_stairs_here()` first.
+- "Known grid" test: `player_memory_of(p,pos).type != LT_NONE` (the player's
+  tile memory). Walkable = known, `mt_is_passable`, not fire/gas cloud, no
+  remembered trap (`memory.trap`), sobject passable or a closed door (stepping
+  in opens it via `player_move(..., true)`; NLarn has no locks), no visible
+  monster. Targets: frontier cells (next to an unknown cell) and remembered
+  items, until the player stood on them (`visited[z][y][x]`, not saved).
+  Search = small Dijkstra, features (stairs, fountains...) cost 11 vs 10 so
+  ties don't cross them (standing on one logs "You see ... here" = stop).
+  Own search instead of `path_find()`: that one only penalises known traps
+  and needs one goal; the travel loop stays unchanged.
+- Stops: any key (40 ms `wtimeout` poll = the step's paint pause), visible
+  threat (`player_visible_threats`, logged "You see a giant bat." + flash),
+  any new log text except "You open the door." / "You see an open door
+  here." (text pending before the step is ignored), failed move, level change,
+  damage. Blocked only by a monster: "Something is in the way."
+- `<`/`>`: on stairs/shaft/entrance/building (and `>` on a known trapdoor or
+  teleport trap) the original command runs; else walk to the nearest
+  remembered `LS_STAIRSDOWN`/`LS_CAVERNS_ENTRY` (`>`) or
+  `LS_STAIRSUP`/`LS_CAVERNS_EXIT` (`<`) and stop on it; press again to take.
+  **Volcanic shafts (`I`, `LS_ELEVATORDOWN/UP`) are never walked to** (they
+  skip levels); used only when stood on. Town `>` walks to the caverns entrance `O`.
+- 3d: NLarn has no `--more--` prompts (messages scroll in the message area),
+  nothing to change.
+- Help: `lib/nlarn.hlp` (Auto-travel section + `<`/`>` lines).
+- Tested: native pty build (gcc + glib shim + ncurses, pyte) and headless
+  Chromium on `web/dist`: town `>` walks to `O` (not the shaft), stops,
+  `>` descends; `X` explores a whole maze level (D3), stops on items,
+  monsters, traps, keys; `<` walks back to the exit and takes it on the
+  second press; town `<` says "You know of no way up on this level.".
 
 - Folder: `/home/user/nlarn` (Mac: `~/Games/nlarn`), fork of upstream nlarn/nlarn
   master @ 8851b1f (pristine base commit), our commits on top, branch `master` (the fork has no `main`).
@@ -51,6 +90,7 @@
   v1.3.2 https://github.com/madler/zlib` plus a `.emscripten_url` file holding the
   archive URL; on the Mac `-sUSE_ZLIB=1` just downloads.
 
-Open problems: game end (main returns) leaves a dead page; no pane routing,
+Open problems: town chatter ("The bar maid says ...") stops walks as a new
+message (by the rule). Game end (main returns) leaves a dead page; no pane routing,
 tiles, help button or rvip-wm layout yet (stage 4/5); translations not shipped
 (English only, `g_get_language_names()` = "C").

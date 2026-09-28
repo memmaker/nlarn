@@ -16,8 +16,11 @@ You can also play with the mouse: click a spot on the map to travel there, click
 
 `KEY`v`end`   voyage (travel) to a location on the level
 `KEY`V`end`   continue travelling
+`KEY`X`end`   auto-explore the level
+`KEY`<`end`   off the stairs: walk to the nearest known staircase up
+`KEY`>`end`   off the stairs: walk to the nearest known staircase down (or the caverns' entrance)
 
-You can select the travel target by moving the cursor or by typing the desired feature's symbol (e.g. `KEY`_`end` for an altar). Subsequent key presses will move the cursor around if there are more than one of the desired features on the level. You can return the cursor to your character by pressing `KEY`@`end`. When finished, press ENTER to start the journey. When a foe comes into sight, travelling will be aborted automatically and can be continued with `KEY`V`end` when the enemy gets out of sight. Whenever a targeting cursor is shown — for travelling as well as for aiming spells and ranged attacks — you can click a map cell with the mouse to move the cursor there, and click it again to confirm.
+You can select the travel target by moving the cursor or by typing the desired feature's symbol (e.g. `KEY`_`end` for an altar). Subsequent key presses will move the cursor around if there are more than one of the desired features on the level. You can return the cursor to your character by pressing `KEY`@`end`. When finished, press ENTER to start the journey. When a foe comes into sight, travelling will be aborted automatically and can be continued with `KEY`V`end` when the enemy gets out of sight. Auto-explore walks one step per turn to the nearest place you have not seen yet or item you have not stood on, opening doors and avoiding known traps, fire and gas clouds. It stops when a monster comes into view (naming it), when a new message appears or when you press any key; press `KEY`X`end` again to go on. `KEY`<`end` and `KEY`>`end` pressed away from the stairs walk to the nearest known staircase of that kind and stop there: press the key again to take the stairs. They never walk to a volcanic shaft, which skips levels; stand on it to use it. Whenever a targeting cursor is shown — for travelling as well as for aiming spells and ranged attacks — you can click a map cell with the mouse to move the cursor there, and click it again to confirm.
 
 
 `TITLE`Other actions`end`
@@ -46,8 +49,8 @@ You can select the travel target by moving the cursor or by typing the desired f
 `KEY`W`end`   wear/wield an item
 `KEY`x`end`   exchange the primary and secondary weapon
 
-`KEY`<`end`   climb up stairs/volcanic shaft
-`KEY`>`end`   climb down stairs/volcanic shaft or enter a building
+`KEY`<`end`   climb up stairs/volcanic shaft (elsewhere: walk to the nearest stairs up)
+`KEY`>`end`   climb down stairs/volcanic shaft or enter a building (elsewhere: walk to the nearest stairs down)
 `KEY`,`end`   pick up items
 `KEY`$`end`   display the bank account balance
 `KEY`:`end`   look at the location you are standing on

@@ -47,6 +47,7 @@
 #include "container.h"
 #include "context.h"
 #include "display.h"
+#include "explore.h"
 #include "game.h"
 #include "nlarn.h"
 #include "pathfinding.h"
@@ -385,12 +386,18 @@ static void mainloop()
     bool adj_corr = false;
     guint end_resting = 0;
 
+    /* no "stood here" marks from a previous game */
+    explore_reset();
+
     /* main event loop
        keep running until the game object was destroyed */
     while (nlarn)
     {
         /* repaint screen */
         display_paint_screen(nlarn->p);
+
+        /* auto-explore: remember where the player has stood */
+        explore_visit(nlarn->p);
 
         /* travel is not (or no longer) in progress: drop the cached path */
         if (!pos_valid(pos) && travel_path != NULL)
@@ -459,6 +466,12 @@ static void mainloop()
                     pos = pos_invalid;
                 }
             }
+        }
+        else if (explore_active())
+        {
+            /* auto-explore / walk to the stairs: one step per turn */
+            ch = 0;
+            moves_count = explore_step(nlarn->p);
         }
         else if (run_cmd != 0)
         {
@@ -691,13 +704,23 @@ static void mainloop()
 
             /* go downstairs / enter a building */
         case '>':
-            if (!((moves_count = player_stairs_down(nlarn->p))))
+            if (!explore_stairs_here(nlarn->p, true))
+                explore_start(nlarn->p, '>');
+            else if (!((moves_count = player_stairs_down(nlarn->p))))
                 moves_count = player_building_enter(nlarn->p);
             break;
 
             /* go upstairs */
         case '<':
-            moves_count = player_stairs_up(nlarn->p);
+            if (!explore_stairs_here(nlarn->p, false))
+                explore_start(nlarn->p, '<');
+            else
+                moves_count = player_stairs_up(nlarn->p);
+            break;
+
+            /* auto-explore */
+        case 'X':
+            explore_start(nlarn->p, 'X');
             break;
 
             /* bank account information */
@@ -1160,6 +1183,9 @@ static void mainloop()
 
         /* recalculate FOV */
         player_update_fov(nlarn->p);
+
+        /* auto-explore / stair walk: stop on monsters, messages, arrival */
+        explore_after_turn(nlarn->p, no_move, was_attacked);
 
         if (run_cmd != 0)
         {
