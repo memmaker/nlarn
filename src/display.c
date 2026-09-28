@@ -44,6 +44,9 @@ const int DEFAULT_COLS = 90;
 #include "map.h"
 #include "extdefs.h"
 #include "spheres.h"
+#ifdef __EMSCRIPTEN__
+#include "tiles.h"   /* RVIP: map tiles (port/tiles.c) */
+#endif
 
 static bool display_initialised = false;
 
@@ -362,6 +365,10 @@ void display_paint_screen(player *p)
     }
 
     mvaddwach(Y(p->pos), X(p->pos), attrs, pc);
+
+#ifdef __EMSCRIPTEN__
+    tiles_paint(p);   /* RVIP: tile ids for the map cells just drawn */
+#endif
 
 
     /* *** first status line below map *** */

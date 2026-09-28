@@ -23,8 +23,12 @@ static WINDOW *cursor_win = NULL;      /* the window refreshed last */
 static PANEL *bottom = NULL, *top = NULL;
 
 /* composed frame, and what the frontend shows (resolved colours) */
-typedef struct { uint32_t ch, fg, bg; int attr; } sent_cell;
+typedef struct { uint32_t ch, fg, bg; int attr, tile; } sent_cell;
 static wc_cell *frame = NULL;
+static bool *from_std = NULL;           /* frame cell comes from stdscr */
+/* tiles of stdscr cells, each with the cell it was set for (port/tiles.c) */
+typedef struct { wc_cell c; int tile; } tile_cell;
+static tile_cell *tiles = NULL;
 static sent_cell *shown = NULL;
 static bool full_redraw = true;
 
@@ -168,6 +172,9 @@ WINDOW *initscr(void)
     curscr = stdscr;
     frame = calloc((size_t)LINES * (size_t)COLS, sizeof *frame);
     shown = calloc((size_t)LINES * (size_t)COLS, sizeof *shown);
+    from_std = calloc((size_t)LINES * (size_t)COLS, sizeof *from_std);
+    tiles = calloc((size_t)LINES * (size_t)COLS, sizeof *tiles);
+    for (int i = 0; i < LINES * COLS; i++) tiles[i].tile = -1;
     be_init(P_SCREEN, COLS, LINES);
     return stdscr;
 }
@@ -580,6 +587,7 @@ static void blit(WINDOW *w)
             int sx = w->begx + x;
             if (sx < 0 || sx >= COLS) continue;
             frame[sy * COLS + sx] = w->c[y * w->maxx + x];
+            from_std[sy * COLS + sx] = w == stdscr;
         }
     }
     w->touched = false;
@@ -588,7 +596,24 @@ static void blit(WINDOW *w)
 /* Stage 1: the whole screen is one pane. */
 static void route(int y, int x, const sent_cell *c)
 {
-    be_put(P_SCREEN, y, x, c->ch, c->fg, c->bg, c->attr);
+    be_put(P_SCREEN, y, x, c->ch, c->fg, c->bg, c->attr, c->tile);
+}
+
+void wc_settile(int y, int x, int tile)
+{
+    if (!stdscr || !tiles || y < 0 || x < 0 || y >= stdscr->maxy || x >= stdscr->maxx
+            || y >= LINES || x >= COLS) return;
+    tile_cell *t = &tiles[y * COLS + x];
+    t->c = stdscr->c[y * stdscr->maxx + x];
+    t->tile = tile;
+}
+
+static int tile_at(int y, int x)
+{
+    int i = y * COLS + x;
+    const tile_cell *t = &tiles[i];
+    if (t->tile < 0 || !from_std[i]) return -1;
+    return t->c.ch == frame[i].ch && t->c.attr == frame[i].attr ? t->tile : -1;
 }
 
 int wnoutrefresh(WINDOW *w)
@@ -610,6 +635,7 @@ int doupdate(void)
             sent_cell s;
             s.ch = c->ch;
             resolve(c->attr, &s.fg, &s.bg, &s.attr);
+            s.tile = tile_at(y, x);
             sent_cell *o = &shown[y * COLS + x];
             if (full_redraw || memcmp(o, &s, sizeof s))
             {

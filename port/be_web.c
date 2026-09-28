@@ -9,7 +9,7 @@
 
 typedef struct {
     int cols, rows;
-    uint32_t *cells;       /* ch, fg, bg | attr << 24 per cell */
+    uint32_t *cells;       /* ch, fg, bg | attr << 24, tile (-1 none) per cell */
     int y0, y1;            /* dirty rows [y0, y1) */
     int cy, cx;            /* cursor, cy < 0: hidden */
 } pane;
@@ -41,21 +41,22 @@ void be_init(int p, int cols, int rows)
     free(q->cells);
     q->cols = cols;
     q->rows = rows;
-    q->cells = calloc((size_t)cols * (size_t)rows * 3, sizeof(uint32_t));
+    q->cells = calloc((size_t)cols * (size_t)rows * 4, sizeof(uint32_t));
     q->y0 = 0;
     q->y1 = rows;
     q->cy = -1;
     js_init(p, cols, rows);
 }
 
-void be_put(int p, int y, int x, uint32_t ch, uint32_t fg, uint32_t bg, int attr)
+void be_put(int p, int y, int x, uint32_t ch, uint32_t fg, uint32_t bg, int attr, int tile)
 {
     pane *q = &panes[p];
     if (!q->cells || y < 0 || x < 0 || y >= q->rows || x >= q->cols) return;
-    uint32_t *c = &q->cells[(y * q->cols + x) * 3];
+    uint32_t *c = &q->cells[(y * q->cols + x) * 4];
     c[0] = ch;
     c[1] = fg;
     c[2] = bg | (uint32_t)attr << 24;
+    c[3] = (uint32_t)tile;
     if (y < q->y0) q->y0 = y;
     if (y + 1 > q->y1) q->y1 = y + 1;
 }

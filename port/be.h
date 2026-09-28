@@ -16,7 +16,9 @@ enum { P_SCREEN, P_MAP, P_STATUS, P_MSG, P_POP, NPANES };
 #define BE_BLINK 4
 
 void be_init(int pane, int cols, int rows);
-void be_put(int pane, int y, int x, uint32_t ch, uint32_t fg, uint32_t bg, int attr);
+/* tile: -1 = text; else a tile id of web/tiles.png (port/tilemap.h),
+ * | TILE_DIM (0x8000, port/tiles.h) for a remembered cell drawn dimmed */
+void be_put(int pane, int y, int x, uint32_t ch, uint32_t fg, uint32_t bg, int attr, int tile);
 void be_cursor(int pane, int y, int x);       /* y < 0: hidden */
 void be_extent(int pane, int cols, int rows); /* cells in use (text panes) */
 void be_flush(void);

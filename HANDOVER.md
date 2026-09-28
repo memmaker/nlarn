@@ -3,7 +3,48 @@
 ## RVIP progress
 
 **Stage 1 (get + build): done.** **Stage 2 (explore + stairs): done.**
-**Stage 3 (Enter menu + inventory): done.** Next: stage 4 (tiles).
+**Stage 3 (Enter menu + inventory): done.** **Stage 4 (tiles): done.** Next: stage 5
+(windows / pane routing).
+
+Stage 4 facts:
+- **Tile set: larn.org's Amiga Larn tiles** (github.com/primeau/Larn `src/img`, MIT,
+  Jason Primeau; licence in `port/amiga/LICENSE`), 8x16, incl. primeau's ULarn-mode
+  art (`m39v`, `m57v`-`m64v` visible stalker/demons). Same arrangement as memmaker/larn
+  and memmaker/ularn: Tiles button cycles **Amiga -> None** (text), choice in
+  `localStorage['nlarn-tileset']`. No DawnLike (siblings ship none; one set).
+- **Generator:** `python3 port/mktiles.py` (from the repo root, needs Pillow) reads
+  the ids from the game's X-macro enums (`MONSTER_TYPE_ENUM`, `MAP_TILE_TYPE_ENUM`,
+  `SOBJECT_TYPE_ENUM`, `TRAP_TYPE_ENUM`, `ITEM_TYPE_ENUM`, amulet/ammo/armour/
+  container/gem/potion/ring/scroll/spell/weapon enums in `inc/*.h`) and asserts
+  a tile for every id: 285/285 ids (100%), 204 sheet slots. Writes `web/tiles.png`
+  (32 per row) and `port/tilemap.h` (arrays indexed by the enums). Stand-ins from
+  the same set, some recoloured (`TINTS`): grass/dirt (floor dot green/brown),
+  tree (o97 plant), water/deep water/lava (wall texture blue/orange), fire, gas
+  cloud, mountains (wall autotile in grey), spiked pit, sleep gas / mana drain
+  traps, town person (elf), cloak/gloves/boots/helmets/shields, bag/crate, short
+  sword, sling/bow/crossbow, club, stones/bullets/arrows/bolts. One picture for all
+  potions / scrolls / books (Larn has one). **Rings and amulets are flavoured:**
+  tile by the game's random material (`ring_material_mapping`,
+  `amulet_material_mapping`), so tiles never identify them. Walls and mountains
+  autotile by orthogonal neighbours (real map; doors count as wall).
+- **Loader / how C hands tile ids to JS:** `port/tiles.c` `tiles_paint(p)`, called
+  at the end of `display_paint_screen()` (`src/display.c`, `#ifdef __EMSCRIPTEN__`),
+  decides every map cell from game data with the text map's own rules (visible:
+  sobject > shown item (gem > gold > top) > known trap > terrain; else player memory;
+  monsters in sight / detected, mimics show their disguise's item tile; spheres;
+  player = Amiga `player` block) and calls the shim's `wc_settile(y, x, tile)`.
+  The shim stores the tile with the stdscr cell it was set for; `doupdate()` sends
+  it only if the composed cell still comes from stdscr and has that char+attr
+  (so pop-ups, animations, targeting stay text). `be_put(..., tile)` → 4th uint32
+  per cell (`-1` = text; bit `0x8000` = remembered, drawn at 45 % alpha).
+  Remembered item piles keep the last seen item's tile (runtime cache in tiles.c,
+  not saved; after a reload they show the item type's generic tile).
+- **Scale:** single canvas, cell = tile aspect (w = h/2); height the largest of
+  16..48 px that fits the window (1440x900: 16x32 = 2x). Nearest-neighbour
+  (`imageSmoothingEnabled = false`). Text cells use a font of 0.78 x cell height.
+  Test hook: `window.nlTiles(y0, y1)` returns the tile ids per map row.
+- Tested headless (Chromium 1440x900): town, D2/D6/V1 with wizard full view,
+  inventory pop-up over the map (text), Tiles -> None -> reload keeps None. No errors.
 
 Stage 3 facts:
 - **Menu widget:** `display_key_menu(title, display_menu_item[], n, initial)` in
@@ -141,5 +182,6 @@ Stage 2 facts:
   archive URL; on the Mac `-sUSE_ZLIB=1` just downloads.
 
 Open problems: Game end (main returns) leaves a dead page; no pane routing,
-tiles, help button or rvip-wm layout yet (stage 4/5); translations not shipped
+help button or rvip-wm layout yet (stage 5; the Tiles button sits in a plain
+top bar; credit the Amiga tiles (MIT, Jason Primeau) on the Help page then); translations not shipped
 (English only, `g_get_language_names()` = "C").

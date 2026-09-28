@@ -6,12 +6,15 @@
 <title>NLarn</title>
 <style>
 html, body { margin: 0; height: 100%; background: #000; color: #ccc; font-family: sans-serif; }
-#screen { display: block; margin: 0 auto; max-width: 100vw; max-height: 100vh; image-rendering: auto; }
+#screen { display: block; margin: 0 auto; }
+#bar { height: 28px; display: flex; justify-content: flex-end; align-items: center; padding: 0 8px; }
+#bar button { font: 13px sans-serif; background: #222; color: #ccc; border: 1px solid #555; border-radius: 4px; padding: 2px 8px; cursor: pointer; }
 #status { position: fixed; left: 0; right: 0; top: 40%; text-align: center; font-size: 18px; }
 #status:empty { display: none; }
 </style>
 </head>
 <body>
+<div id="bar"><button id="btn-tiles" title="Map tiles: Amiga Larn set or text">Tiles: Amiga</button></div>
 <canvas id="screen" tabindex="0"></canvas>
 <div id="status">Loading NLarn…</div>
 <script src="nlarn.js"></script>

@@ -27,7 +27,7 @@ fi
 emcc $FLAGS -std=gnu99 -Iport -Iport/glib -Iinc -Iinc/external \
 	-DG_DISABLE_DEPRECATED \
 	-Wall -Wno-unused-parameter -Wno-unused-function \
-	src/*.c src/external/*.c port/glib/glib.c port/wcurses.c port/be_web.c \
+	src/*.c src/external/*.c port/glib/glib.c port/wcurses.c port/be_web.c port/tiles.c \
 	-o "$OUT/nlarn-core.js" \
 	-sUSE_ZLIB=1 \
 	-sASYNCIFY -sASYNCIFY_STACK_SIZE=131072 -sSTACK_SIZE=4MB \
@@ -36,5 +36,5 @@ emcc $FLAGS -std=gnu99 -Iport -Iport/glib -Iinc -Iinc/external \
 	-sEXPORTED_RUNTIME_METHODS=FS,IDBFS,ENV,HEAPU32,addRunDependency,removeRunDependency \
 	-sFORCE_FILESYSTEM -lidbfs.js -sENVIRONMENT=web \
 	--preload-file "$STAGE/lib@/nlarn-data/lib"
-cp web/index.html web/nlarn.js "$OUT/"
+cp web/index.html web/nlarn.js web/tiles.png "$OUT/"
 ls -la "$OUT"

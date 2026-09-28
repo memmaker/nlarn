@@ -203,6 +203,9 @@ bool can_change_color(void);
 int init_color(short color, short r, short g, short b);
 int init_pair(short pair, short fg, short bg);
 int set_escdelay(int ms);
+/* RVIP: tile for a stdscr cell (-1 none), valid while the cell keeps the
+ * character and attributes it has now (port/tiles.c) */
+void wc_settile(int y, int x, int tile);
 
 #define getmaxx(w) ((w) ? (w)->maxx : ERR)
 #define getmaxy(w) ((w) ? (w)->maxy : ERR)
