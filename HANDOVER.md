@@ -11,18 +11,17 @@ in the "R-NLarn" section of `RVIP.md` in memmaker/rvip, branch
 **Nothing is deployed:** the cloud container has no ssh and cannot reach
 ruzzoli.de.
 
-Stage 7 (publish) is done too (see "RVIP progress"). Remaining work, in order (one stage agent each, per `RVIP.md` "Stages and
+Stages 7 (publish) and 8 (shrine) are done too (see "RVIP progress"). Remaining work (one stage agent, per `RVIP.md` "Stages and
 checkpoints"):
 
-1. **Stage 8 - Shrine** (step 11): `shrine/nlarn.html` + `shrine/nlarn/`,
-   linked from card (Info), tree (✦) and the game page's `#bar h1`. Manual:
-   `lib/nlarn.hlp` (GPL-3, may be copied). Report whether a walkthrough exists.
-2. **Stage 9 - Graveyard + leaderboard** (step 12): `js_beacon` from NLarn's
+1. **Stage 9 - Graveyard + leaderboard** (step 12): `js_beacon` from NLarn's
    own run-end code (death/win/quit; `player_die()` / the scoreboard entry in
    `src/player.c` / `src/scoreboard.c`), via `RvipWM.report`; `g=nlarn`;
    score = NLarn's own score; killer art: add nlarn to
    `roguelikes-index/killers/make.py` (Amiga tiles via `port/tilemap.h`).
-   Test that the win path is reached (golden rule).
+   Test that the win path is reached (golden rule). Wizard mode (Enter menu ->
+   "activate wizard mode", `-` = level down) helps; runs in wizard mode are not
+   scored by NLarn, so they must not be reported either.
 
 **On the Mac, after the stages** (cloud cannot do these):
 ```
@@ -31,7 +30,7 @@ cd ~/Games/roguelikes-index && git checkout main && git pull && git fetch origin
   && git merge origin/claude/beautiful-heisenberg-g88r1w && ./order.py && git push origin main   # NLarn card, tree, years.json, img/nlarn.png
 git clone https://github.com/memmaker/nlarn ~/Games/nlarn   # or git pull
 cd ~/Games/nlarn && sh web/build.sh && sh web/deploy.sh      # build on the Mac ships the town music
-cd ~/Games/roguelikes-index && ./deploy.sh                   # card, tree, shrine, shared rvip-*.js
+cd ~/Games/roguelikes-index && ./deploy.sh                   # card, tree, shrine (Info, ✦), shared rvip-*.js
 git -C ~/Games/nlarn push origin --delete claude/beautiful-heisenberg-g88r1w   # stale WIP branch (proxy refused the delete)
 ```
 Then the checks from the "Deploy" block below, `curl -s
@@ -52,7 +51,19 @@ Open problems carried forward:
 **Stage 1 (get + build): done.** **Stage 2 (explore + stairs): done.**
 **Stage 3 (Enter menu + inventory): done.** **Stage 4 (tiles): done.**
 **Stage 5 (web page, windows, finetuning): done.** **Stage 6 (docs + sound): done.**
-**Stage 7 (publish): done.** Next: stage 8 (shrine).
+**Stage 7 (publish): done.** **Stage 8 (shrine): done.** Next: stage 9 (graveyard + leaderboard).
+
+Stage 8 facts: `roguelikes-index/shrine/nlarn.html` (11 sections, hand-written `<!--og-->`
+block, card image, card `<p>` as description) + `shrine/nlarn/` (`manual.html` = upstream
+`lib/nlarn.hlp` at 8851b1f converted (markers -> `<b>`/`<em>`), `changelog.txt`, `license.txt`
+GPL-3). Linked from the card (Info), the tree (✦) and `web/index.html` `#bar h1` (the
+`#bar h1 a` rule was already there). No walkthrough exists; the project site has a
+spoilers guide (linked). Trivia sources: nlarn.github.io pages (about, news 0.3, 0.6 ARRP,
+moved-to-github, 256 colours, 0.8), verified from the site's source repo
+`github.com/nlarn/nlarn.github.io` (git clone works; the site, RogueBasin, web.archive.org
+and blog.roguetemple.com are blocked by the cloud proxy), plus the change log and code at
+8851b1f. Wizard mode works in the web build via the Enter menu (tested headlessly:
+confirm, `-` went Town -> D1); Ctrl+W itself closes the tab in browsers. 375 px: no overflow.
 
 Stage 7 facts: README top = upstream (nlarn/nlarn @ 8851b1f6420c17afc122a47e0b1b9e2b7b251878,
 NLarn 0.8.1) + compare view + "Web port" section. `<!--og-->` block in `web/index.html`
