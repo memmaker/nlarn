@@ -4,7 +4,7 @@
 
 Where we stand: stages 1-6 of `RVIP.md` are done, committed and pushed on
 `memmaker/nlarn` `master` (upstream base nlarn/nlarn `master` @ 8851b1f; our
-commits 696e1c5..74dca32). The RVIP-Finetuning items are done in stage 5
+commits 696e1c5..74dca32). The finetuning items (now in the `RVIP.md` stage checklists) are done in stage 5
 (DawnLike items do not apply: Amiga set only, like larn/ularn). Lessons are
 in the "R-NLarn" section of `RVIP.md` in memmaker/rvip, branch
 `claude/beautiful-heisenberg-g88r1w` (not merged into rvip `main` yet).
@@ -267,7 +267,7 @@ Stage 3 facts:
   `lib/nlarn.hlp`: every line starting with `` `KEY`k`end` `` is a command, grouped
   under the help's `` `TITLE` `` headings (Auto-travel, Other actions, Control Keys,
   Wizard Mode Actions). Movement / running are pictures in the help, so they are not
-  in the menu (Finetuning "Movement"). Skipped: duplicate keys (first wins: `<`/`>`
+  in the menu (`RVIP.md` stage 3). Skipped: duplicate keys (first wins: `<`/`>`
   from Auto-travel, `^D` = landmarks), `^U` (list paging), wizard keys except `^W`
   outside wizard mode. `mainloop()`: right after `ch = display_getch(NULL)`, Enter
   (LF/CR/KEY_ENTER) becomes `ch = command_menu()`, so the chosen key runs through
