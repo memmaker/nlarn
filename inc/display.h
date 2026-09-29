@@ -39,6 +39,8 @@
    (Dubtrain Angband Sound Pack event names, web/sounds.py); no-op elsewhere */
 #ifdef __EMSCRIPTEN__
 void be_sound(const char *event);
+struct score_t;
+void be_run_end(struct score_t *score);
 #  define SOUND(e) be_sound(e)
 #else
 #  define SOUND(e) ((void) 0)

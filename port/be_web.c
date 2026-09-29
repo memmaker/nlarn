@@ -197,3 +197,24 @@ EM_JS(void, js_sound, (const char *e), {
 void be_sound(const char *event) { js_sound(event); }
 
 void web_sync_files(void) { js_sync(); }
+
+/* RVIP 12: run report (roguelikes-index/server/CONTRACT.md) from player_die(),
+   non-wizard runs only, through the rvip-wm outbox; never throws. */
+#include "scoreboard.h"
+#include "monsters.h"
+EM_JS(void, js_beacon, (const char *ev, const char *name, const char *killer, int depth, double score, int turns, int lvl), {
+    try {
+        var p = [['g', 'nlarn'], ['ev', UTF8ToString(ev)], ['name', UTF8ToString(name)],
+                 ['killer', killer ? UTF8ToString(killer) : ''], ['depth', depth], ['score', score], ['turns', turns], ['lvl', lvl]];
+        var q = p.filter(function (a) { return a[1] !== ''; })
+                 .map(function (a) { return a[0] + '=' + encodeURIComponent(a[1]); }).join('&');
+        if (window.RvipWM && RvipWM.report) RvipWM.report(q); else fetch('/roguelikes/beacon?' + q, { keepalive: true, mode: 'no-cors' }).catch(function () {});
+    } catch (e) {}
+});
+void be_run_end(score_t *s)
+{
+    const char *ev = s->cod == PD_WON ? "win" : s->cod == PD_QUIT ? "quit" : "death";
+    js_beacon(ev, s->player_name ? s->player_name : "",
+              s->cod == PD_MONSTER ? monster_type_name(s->cause) : NULL,
+              s->dlevel, (double) s->score, (int) s->moves, s->level);
+}

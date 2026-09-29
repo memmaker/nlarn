@@ -1243,6 +1243,9 @@ void player_die(player *p, player_cod cause_type, guint cause)
         flushinp();
 
         score_t *score = score_new(nlarn, cause_type, cause);
+#ifdef __EMSCRIPTEN__
+        be_run_end(score);   /* RVIP 12: graveyard/leaderboard beacon */
+#endif
         GList *scores = score_add(score);
 
         /* create a description of the player's achievements */
