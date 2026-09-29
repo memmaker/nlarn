@@ -11,26 +11,13 @@ in the "R-NLarn" section of `RVIP.md` in memmaker/rvip, branch
 **Nothing is deployed:** the cloud container has no ssh and cannot reach
 ruzzoli.de.
 
-Remaining work, in order (one stage agent each, per `RVIP.md` "Stages and
+Stage 7 (publish) is done too (see "RVIP progress"). Remaining work, in order (one stage agent each, per `RVIP.md` "Stages and
 checkpoints"):
 
-1. **Stage 7 - Publish** (Part 1 steps 8, 9, 10, 5b; W1, W11.6):
-   - Repo README top lines: what the upstream is (link
-     https://github.com/nlarn/nlarn/tree/<full 8851b1f hash>), compare view
-     `https://github.com/memmaker/nlarn/compare/8851b1f...master` (the fork's
-     branch is `master`, not `main`). Add nlarn to the repo table in W2.
-   - Selection page (`~/Games/roguelikes-index`, `git pull` first): card in
-     `index.html` next to Larn/uLarn (12x5 or 24x5 Amiga monster tiles at 2x
-     = `img/nlarn.png`, tag "Larn variant · <first-release year>", 1-2
-     sentences, no input hints, W1 line `Based on NLarn <ver> ·
-     nlarn/nlarn @ 8851b1f`), bump "N classic roguelikes". Tree entry under
-     Larn (Joachim de Groot; check year/parent on the web and in the
-     sources). `<!--og-->` block for `web/index.html` by hand (R-Larn Ularn
-     stage 7 note), not a full `og.py` run.
-2. **Stage 8 - Shrine** (step 11): `shrine/nlarn.html` + `shrine/nlarn/`,
+1. **Stage 8 - Shrine** (step 11): `shrine/nlarn.html` + `shrine/nlarn/`,
    linked from card (Info), tree (✦) and the game page's `#bar h1`. Manual:
    `lib/nlarn.hlp` (GPL-3, may be copied). Report whether a walkthrough exists.
-3. **Stage 9 - Graveyard + leaderboard** (step 12): `js_beacon` from NLarn's
+2. **Stage 9 - Graveyard + leaderboard** (step 12): `js_beacon` from NLarn's
    own run-end code (death/win/quit; `player_die()` / the scoreboard entry in
    `src/player.c` / `src/scoreboard.c`), via `RvipWM.report`; `g=nlarn`;
    score = NLarn's own score; killer art: add nlarn to
@@ -40,7 +27,8 @@ checkpoints"):
 **On the Mac, after the stages** (cloud cannot do these):
 ```
 cd ~/Games/rvip-tools && git fetch && git merge origin/claude/beautiful-heisenberg-g88r1w   # RVIP.md R-NLarn, rvip-sound.js .mp3 fix
-cd ~/Games/roguelikes-index && git pull   # after merging its claude/beautiful-heisenberg-g88r1w branch
+cd ~/Games/roguelikes-index && git checkout main && git pull && git fetch origin \
+  && git merge origin/claude/beautiful-heisenberg-g88r1w && ./order.py && git push origin main   # NLarn card, tree, years.json, img/nlarn.png
 git clone https://github.com/memmaker/nlarn ~/Games/nlarn   # or git pull
 cd ~/Games/nlarn && sh web/build.sh && sh web/deploy.sh      # build on the Mac ships the town music
 cd ~/Games/roguelikes-index && ./deploy.sh                   # card, tree, shrine, shared rvip-*.js
@@ -64,7 +52,30 @@ Open problems carried forward:
 **Stage 1 (get + build): done.** **Stage 2 (explore + stairs): done.**
 **Stage 3 (Enter menu + inventory): done.** **Stage 4 (tiles): done.**
 **Stage 5 (web page, windows, finetuning): done.** **Stage 6 (docs + sound): done.**
-Next: stage 7 (publish).
+**Stage 7 (publish): done.** Next: stage 8 (shrine).
+
+Stage 7 facts: README top = upstream (nlarn/nlarn @ 8851b1f6420c17afc122a47e0b1b9e2b7b251878,
+NLarn 0.8.1) + compare view + "Web port" section. `<!--og-->` block in `web/index.html`
+by hand (og.py's second loop; the old description meta is dropped, the og block has one).
+Selection page (memmaker/roguelikes, branch `claude/beautiful-heisenberg-g88r1w`, NOT on
+`main` and NOT deployed): card `img/nlarn.png` (65 NLarn monster tiles, shuffled, 24x5 at 2x
+= 384x160), tag "Larn variant · 2009", `Based on NLarn 0.8.1 · nlarn/nlarn @ 8851b1f`,
+no Info button yet (stage 8 adds it with the shrine); `years.json` `nlarn` = 2009; count
+40 -> 41. `order.py` sorts cards by year, so the card sits between ToME 2 (2008) and
+TinyAngband (2009), not next to Larn/uLarn. Tree: `<li class="insp">` under Larn (sibling of
+RL_M and uLarn), "2009 · Joachim de Groot; with Johanna Ploog", why: new GPL C code
+modelled on Larn 12.3.
+Sources: year = `Changelog.md` "Release 0.3.0 (2009-07-13) First publicly available
+version of nlarn" (linked at the base commit); SourceForge project registered 2009-03-09
+(search snippet); git history starts 2009-06-19. Parent: README "Heritage" (modelled after
+Larn 12.3, a few Ularn additions), GitHub description "A rewrite of Noah Morgan's
+classic roguelike game Larn (1986)", every source file (C) 2009- Joachim de Groot, GPL-3
+(no Larn code) -> inspired, not derived. Co-maintainer: Johanna Ploog (235 commits,
+`git shortlog -sn`). RogueBasin, Wikipedia, nlarn.github.io and larn.org are blocked
+by the cloud proxy: not checked directly (web search snippets agree: 2009, de Groot,
+Larn 12.3). No disagreements found.
+Open: the index page is 376 px wide at 375 px (1 px horizontal overflow, also without
+the NLarn card: pre-existing).
 
 **Deploy (on the Mac, nothing was deployed from the cloud):**
 ```

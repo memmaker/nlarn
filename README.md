@@ -1,3 +1,26 @@
+# NLarn for the web (memmaker/nlarn)
+
+This is a fork of [NLarn](https://github.com/nlarn/nlarn) by Joachim de Groot,
+based on upstream `master` at commit
+[8851b1f](https://github.com/nlarn/nlarn/tree/8851b1f6420c17afc122a47e0b1b9e2b7b251878)
+(NLarn 0.8.1). All our changes are in the commits after it:
+[compare view](https://github.com/memmaker/nlarn/compare/8851b1f...master).
+Play it at https://ruzzoli.de/roguelikes/nlarn/.
+
+## Web port
+
+We added a WebAssembly build that runs in the browser: a small GLib subset
+and a curses shim (`port/`), Amiga Larn tiles, a window layout with Map,
+Messages, Status and Inventory panes, auto-explore (`X`), `<`/`>` that walk
+to the stairs, an Enter command menu, item menus, saves in IndexedDB, a Help
+page and optional sound. Build it with Emscripten:
+
+    sh web/build.sh      # output in web/dist
+
+The upstream README follows unchanged.
+
+---
+
 Welcome to NLarn!
 =================
 
