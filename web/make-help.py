@@ -143,7 +143,7 @@ WEB = '''<ul>
 <li><strong>Tiles</strong> switches between the Amiga Larn tiles and plain text. <strong>Font</strong> picks the font of the text windows; in text mode the map has its own font chooser on its title bar.</li>
 <li><strong>Mouse:</strong> click a spot on the map to travel there, click a monster to attack it; menus and lists take clicks too. A click on the Inventory window opens the inventory.</li>
 <li><strong>Keys:</strong> the arrow keys, the number pad or <kbd>hjklyubn</kbd> move you; capital letters run. Browsers keep a few shortcuts for themselves (<kbd>Ctrl+W</kbd>, <kbd>Ctrl+T</kbd>, <kbd>Ctrl+N</kbd>, <kbd>Cmd</kbd> shortcuts on a Mac), so those never reach the game.</li>
-<li><strong>Audio ▾ → Sound effects</strong> plays a short sample when you hit or miss, a monster hits you, you kill something, cast a spell, drink, read, pick up, drop, wield or wear, open or close a door, take the stairs, enter a building or pay, fire a missile, gain a level, and when you die. <strong>Music</strong> is a loop that plays in town, in builds that ship it (without it the checkbox turns grey when you switch it on). Both are off by default and remembered with the window layout.</li>
+<li><strong>Audio ▾ → Sound effects</strong> plays a short sound when you hit or miss, a monster hits you, you kill something, cast a spell, drink, read, pick up, drop, wield or wear, open or close a door, take the stairs, enter a building or pay, fire a missile, gain a level, and when you die. It is off by default and remembered with the window layout. NLarn ships no audio, so these effects were synthesized for this port; there is no music.</li>
 <li>If the game ever crashes, a message appears at the top; reload the page to continue from the last autosave.</li>
 </ul>'''
 
@@ -196,9 +196,7 @@ CREDITS = ('<ul>'
     'ideas from Phil Cordier\'s <strong>ULarn</strong>.</li>'
     '<li>Tiles: the Amiga Larn set from <a href="https://larn.org/" target="_blank" rel="noopener">larn.org</a> '
     '(github.com/primeau/Larn, MIT, Jason Primeau), a few recoloured for town and volcano terrain.</li>'
-    '<li>Sound effects: the <strong>Dubtrain Angband Sound Pack</strong> by Dubtrain (angband@dubtrain.com), '
-    '<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>, '
-    'as shipped with <a href="https://github.com/angband/angband" target="_blank" rel="noopener">Angband</a>.</li>'
+    '<li>Sound effects: synthesized for this port (<code>web/mksounds.py</code>).</li>'
     '<li>Fonts: the text-window fonts come from the Ultimate Oldschool PC Font Pack by VileR '
     '(<a href="https://int10h.org/oldschool-pc-fonts/" target="_blank" rel="noopener">int10h.org</a>, CC BY-SA 4.0); '
     'the default is your system\'s monospace font (DejaVu Sans Mono, Menlo or Consolas).</li>'

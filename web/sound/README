@@ -1,5 +1,0 @@
-Samples from the Dubtrain Angband Sound Pack by Dubtrain <angband@dubtrain.com>,
-licensed under Creative Commons Attribution 4.0 (CC BY 4.0), as shipped with
-upstream Angband (github.com/angband/angband, lib/sounds). Only the samples
-NLarn's sound events use are copied here by web/sounds.py; sounds.json maps
-each event to its samples.

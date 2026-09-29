@@ -15,8 +15,6 @@ shrine `roguelikes-index/shrine/nlarn.html`. Stages 1–6 ran in a cloud session
   `../rvip-app.js`, `../rvip-sound.js`, `../fonts/`: run `roguelikes-index/deploy.sh` too if
   rvip-tools changed. Check: `curl -sI https://ruzzoli.de/roguelikes/nlarn/nlarn-core.wasm`
   → `application/wasm`.
-- **Music ships only from a Mac build**: `build.sh` copies `new_town.ogg` from
-  `~/Projects/heavenAndHell/...` if present; without it the Music checkbox greys out.
 - Native build (upstream `Makefile`, real GLib/ncurses) is unchanged; all web code is
   `#ifdef __EMSCRIPTEN__`. Test it through a pty with `TERM=screen-256color` (pyte ignores
   xterm-256color's REP sequence).
@@ -51,8 +49,10 @@ shrine `roguelikes-index/shrine/nlarn.html`. Stages 1–6 ran in a cloud session
   `web-layout.json`. Autosave: JS flag (2 min, hidden, Export) → `be_getkey()` runs
   `game_save()` at the command prompt with `web_autosaving` (no "Saving...." pop-up).
   `^S` / `q` in the main menu → `be_end()` → page syncs and reloads.
-- Sound: `SOUND("event")` (24 events, `inc/display.h`) → `be_sound()`; Dubtrain mp3s vendored
-  in `web/sound/` by `python3 web/sounds.py [angband-checkout]`.
+- Sound: `SOUND("event")` (24 events, `inc/display.h`) → `be_sound()`; `web/mksounds.py`
+  synthesizes one wav per event at build time (sine/FM tones made for NLarn). No music.
+- Stage 6 sound search (2026-09-29): NLarn ships no audio (repo, releases up to 0.8.1; "monsters
+  produce sounds" in 0.7.6 is message text); larn.org has none. Nothing to use.
 - Help: `web/make-help.py` (key list from `lib/nlarn.hlp`; uses the Docs entry `nlarn.html`
   if present).
 - Beacon: `be_run_end(score)` in `player_die()` right after `score_new()` (non-wizard only):

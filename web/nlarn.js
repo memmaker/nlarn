@@ -187,7 +187,7 @@
 		return { v: 1, tile: tile, auto: true, mt: {},
 			split: { bottom: (mapH + GUT / 2) / H, side: (W - sideW - GUT / 2) / W,
 				stat: (24 * Math.round(font * 1.3) + TITLE_H + BORDER + GUT / 2) / H },
-			audio: { sound: false, music: false } };
+			audio: { sound: false } };
 	}
 
 	function loadLayout() {
@@ -205,7 +205,7 @@
 				if (typeof s.face === 'string') d.face = s.face;
 				if (typeof s.mapFace === 'string') d.mapFace = s.mapFace;
 				if (typeof s.tiles === 'string') d.tiles = s.tiles;  /* the tile set, by name */
-				if (s.audio) d.audio = { sound: s.audio.sound === true, music: s.audio.music === true };
+				if (s.audio) d.audio = { sound: s.audio.sound === true };
 			}
 		} catch (err) { /* nothing saved yet */ }
 		L = d;
@@ -277,11 +277,10 @@
 	}
 
 	/* ---------- audio ---------- */
-	/* sound events come from the game (SOUND() -> port/be_web.c), named like the Dubtrain
-	 * Angband Sound Pack's (web/sounds.py picks the samples); rvip-sound.js plays them.
-	 * Nothing is fetched until Sound effects is on. Music: the Larn siblings' town loop,
-	 * only in builds that have music/new_town.ogg (web/build.sh). */
-	var audio = { cfg: null, loading: false, town: false, el: null, played: 0, noMusic: false };
+	/* sound events come from the game (SOUND() -> port/be_web.c); web/mksounds.py
+	 * synthesizes one wav per event at build time; rvip-sound.js plays them.
+	 * Nothing is fetched until Sound effects is on. NLarn has no music. */
+	var audio = { cfg: null, loading: false, played: 0 };
 	function play(name) {
 		if (!L || !L.audio.sound) return;
 		if (!audio.cfg) {
@@ -297,30 +296,13 @@
 		audio.played++;                          /* testing */
 		RVIPSound.play([files[Math.floor(Math.random() * files.length)]], 0.6);
 	}
-	function updateMusic() {
-		var on = L && L.audio.music && audio.town && app.running && !audio.noMusic;
-		if (on && !audio.el) {
-			audio.el = new Audio('music/new_town.ogg');
-			audio.el.loop = true; audio.el.volume = 0.4;
-			audio.el.onerror = function () {        /* this build has no music */
-				audio.noMusic = true; audio.el = null;
-				L.audio.music = false; renderAudio(); saveLayout();
-			};
-		}
-		if (!audio.el) return;
-		if (on) audio.el.play().catch(function () { }); else audio.el.pause();
-	}
 	function toggleAudio(k) {
 		L.audio[k] = !L.audio[k];
 		if (k === 'sound' && L.audio.sound && !audio.cfg) play('');   /* load the event list */
-		renderAudio(); updateMusic(); saveLayout();
+		renderAudio(); saveLayout();
 	}
 	function renderAudio() {
-		var a = L ? L.audio : { sound: false, music: false };
-		$('chk-sound').checked = a.sound;
-		$('chk-music').checked = a.music && !audio.noMusic;
-		$('chk-music').disabled = audio.noMusic;
-		$('chk-music').parentNode.title = audio.noMusic ? 'No music in this build' : 'Music on or off (town)';
+		$('chk-sound').checked = !!(L && L.audio.sound);
 	}
 
 	/* ---------- called by the game (port/be_web.c) ---------- */
@@ -375,7 +357,6 @@
 			if (y === hero.y && x === hero.x && z === hero.z) return;
 			var oy = hero.y, ox = hero.x;
 			hero.y = y; hero.x = x; hero.z = z;
-			if ((z === 0) !== audio.town) { audio.town = z === 0; updateMusic(); }
 			if (panes[P_MAP] && oy >= 0) cell(P_MAP, oy, ox);
 			scrollMap();
 		},
@@ -396,7 +377,7 @@
 		sound: function (name) { play(name); },
 		sounds: function () { return audio.played; },   /* testing */
 		end: function () {                               /* main() returned: quit, or saved and quit */
-			app.running = false; updateMusic();
+			app.running = false;
 			status(hasSave() ? 'Game saved. Restarting…' : 'Starting a new game…');
 			app.sync(function () { setTimeout(function () { location.reload(); }, 800); });
 		}
@@ -602,7 +583,6 @@
 		$('btn-tiles').onclick = toggleTileset;
 		renderTileset();
 		$('chk-sound').onchange = function () { toggleAudio('sound'); };
-		$('chk-music').onchange = function () { toggleAudio('music'); };
 		RvipWM.dropdown($('btn-audio'), $('menu-audio'));
 		RvipWM.dropdown($('btn-file'), $('menu-file'));
 		fetch('fonts.json').then(function (r) { return r.json(); }).then(function (list) {

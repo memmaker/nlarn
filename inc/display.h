@@ -36,7 +36,7 @@
 #include "player.h"
 
 /* RVIP web port: SOUND("event") names a sound event at the game action
-   (Dubtrain Angband Sound Pack event names, web/sounds.py); no-op elsewhere */
+   (web/mksounds.py synthesizes a wav per event); no-op elsewhere */
 #ifdef __EMSCRIPTEN__
 void be_sound(const char *event);
 struct score_t;

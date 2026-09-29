@@ -37,11 +37,8 @@ emcc $FLAGS -std=gnu99 -Iport -Iport/glib -Iinc -Iinc/external \
 	-sFORCE_FILESYSTEM -lidbfs.js -sENVIRONMENT=web \
 	--preload-file "$STAGE/lib@/nlarn-data/lib"
 cp web/index.html web/nlarn.js web/tiles.png "$OUT/"
-# sound effects: Dubtrain samples for the game's SOUND() events (web/sounds.py made web/sound)
-cp -R web/sound "$OUT/sound"
-# music: the Larn siblings' town loop, where this machine has it (not in the repo)
-MUSIC="$HOME/Projects/heavenAndHell/files/mods/heavenandhell/music/new_town.ogg"
-if [ -f "$MUSIC" ]; then mkdir -p "$OUT/music" && cp "$MUSIC" "$OUT/music/"; fi
+# sound effects, synthesized for the game's SOUND() events
+python3 web/mksounds.py "$OUT/sound"
 # text fonts: the index page's fonts/ (loaded from ../fonts/ on the server)
 FONTS="$HOME/Games/roguelikes-index/fonts"
 [ -d "$FONTS" ] || FONTS=/home/user/roguelikes/fonts
