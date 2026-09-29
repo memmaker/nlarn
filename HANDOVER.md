@@ -11,8 +11,7 @@ in the "R-NLarn" section of `RVIP.md` in memmaker/rvip, branch
 **Nothing is deployed:** the cloud container has no ssh and cannot reach
 ruzzoli.de.
 
-Stages 7 (publish) and 8 (shrine) are done too (see "RVIP progress"). Remaining work (one stage agent, per `RVIP.md` "Stages and
-checkpoints"):
+Stages 7 (publish) and 8 (shrine) are done too (see "RVIP progress"). Stage 9 is done too; nothing remains of the RVIP stages. Old plan kept for reference:
 
 1. **Stage 9 - Graveyard + leaderboard** (step 12): `js_beacon` from NLarn's
    own run-end code (death/win/quit; `player_die()` / the scoreboard entry in
@@ -51,7 +50,19 @@ Open problems carried forward:
 **Stage 1 (get + build): done.** **Stage 2 (explore + stairs): done.**
 **Stage 3 (Enter menu + inventory): done.** **Stage 4 (tiles): done.**
 **Stage 5 (web page, windows, finetuning): done.** **Stage 6 (docs + sound): done.**
-**Stage 7 (publish): done.** **Stage 8 (shrine): done.** Next: stage 9 (graveyard + leaderboard).
+**Stage 7 (publish): done.** **Stage 8 (shrine): done.** **Stage 9 (graveyard + leaderboard): done.** All RVIP stages done (2026-09-29; card, tree, shrine and game deployed).
+
+Stage 9 facts: `be_run_end(score)` (`port/be_web.c`, declared in `inc/display.h`) is called in
+`player_die()` (`src/player.c`) right after `score_new()`, i.e. only in the non-wizard branch, so
+wizard runs are never reported (NLarn does not score them either). One place covers death, win
+(`PD_WON`, `buildings.c`), quit (`^Q`) and the time-limit losses (`PD_TOO_LATE`/`PD_LOST` -> `ev=death`
+without killer). Save-and-exit (`^S`) does not pass `player_die()`: nothing sent. Fields: g=nlarn, ev,
+name (`score->player_name`), killer (`monster_type_name(cause)`, only for `PD_MONSTER`; traps, map,
+spells, effects send no killer), depth (`Z(pos)`: 0 town, 1-10 caverns, 11-13 volcano), score
+(NLarn's own `player_calc_score`), turns (`game_turn`), lvl. Killer art: `nlarn()` in
+`roguelikes-index/killers/make.py` (65 PNGs from `web/tiles.png` via `port/tilemap.h` `mon_tile`).
+Tested live: quit through the Enter menu (`^Q` entry) -> `g=nlarn&ev=quit&name=Beacontest&depth=0&score=58&turns=1&lvl=1`.
+Death and win not played live; both run the same line as quit (no early return for them).
 
 Stage 8 facts: `roguelikes-index/shrine/nlarn.html` (11 sections, hand-written `<!--og-->`
 block, card image, card `<p>` as description) + `shrine/nlarn/` (`manual.html` = upstream
