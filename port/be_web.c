@@ -39,6 +39,9 @@ EM_JS(int, js_key, (int at_cmd), {
 EM_JS(void, js_popup, (int rows, int cols, int y0, int x0), {
     Module.nl.popup(rows, cols, y0, x0);
 });
+EM_JS(void, js_popbg, (int rgb), {
+    Module.nl.popbg(rgb);
+});
 EM_JS(int, js_icons, (void), {
     return Module.nl.icons();
 });
@@ -91,6 +94,8 @@ void be_popup(int rows, int cols, int y0, int x0)
     if (rows <= 0 || cols <= 0) rows = cols = 0;
     js_popup(rows, cols, y0, x0);
 }
+
+void be_popbg(uint32_t rgb) { js_popbg((int)(rgb & 0xffffff)); }
 
 void be_line(int p, int y, const char *s, const char *css, int tile) { js_line(p, y, s, css, tile); }
 void be_rows(int p, int n) { js_rows(p, n); }

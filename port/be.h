@@ -33,6 +33,7 @@ void be_line(int pane, int y, const char *text, const char *css, int tile);
 void be_rows(int pane, int rows);
 void be_flush(void);
 void be_popup(int rows, int cols, int y0, int x0); /* rows 0: closed; y0/x0: screen origin (mouse) */
+void be_popbg(uint32_t rgb); /* the pop-up pane's own background (the window's colour) */
 int be_icons(void);                           /* a tile set is shown (Inventory rows get icons) */
 void be_hero(int y, int x, int level);        /* the player's map cell: the page centres on it */
 void be_prompt(const char *s);                /* prompt line over the map (newest message) */

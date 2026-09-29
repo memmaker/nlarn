@@ -690,6 +690,8 @@ static void row_text(const sent_cell *r, int w, uint32_t base_bg, char *buf)
     buf[n] = 0;
 }
 
+static uint32_t pop_bg = 0xffffffff; /* the pop-up background last sent */
+
 /* send a pane's changed rows and its rows in use */
 static void send_text(int p, const sent_cell *cells, int w, int h)
 {
@@ -699,6 +701,7 @@ static void send_text(int p, const sent_cell *cells, int w, int h)
     /* the pane's own background (a pop-up's box colour) is the page's; other
        backgrounds go into the runs */
     uint32_t base_bg = p == P_POP && w * h > 0 ? cells[0].bg & 0xffffff : 0;
+    if (p == P_POP && base_bg != pop_bg) be_popbg(pop_bg = base_bg);
     if (h > t->n) h = t->n;
     for (int y = 0; y < h; y++)
     {
@@ -824,6 +827,7 @@ static void pop_compose(void)
     {
         pop_h = h; pop_w = w; pop_y0 = y0; pop_x0 = x0;
         be_popup(h, w, y0, x0);
+        pop_bg = 0xffffffff;
         if (h && w) text_reset(P_POP, h);
     }
     if (!h || !w) return;

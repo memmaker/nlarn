@@ -369,6 +369,7 @@
 			$('pop').hidden = false;
 			placePop();
 		},
+		popbg: function (rgb) { $('pop').style.background = '#' + ('00000' + rgb.toString(16)).slice(-6); },
 		icons: function () { return tilesReady ? 1 : 0; },
 		hero: function (y, x, z) {
 			if (y === hero.y && x === hero.x && z === hero.z) return;
